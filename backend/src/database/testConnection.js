@@ -13,6 +13,7 @@ async function testConnection() {
         console.error(
             "Database connection failed", error.message
         )
+        throw error
     }
     
 }
