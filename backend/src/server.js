@@ -1,12 +1,12 @@
-require('dotenv').config()
 
 const app = require("./app");
 const testConnection=require('./database/testConnection');
 const errorHandler = require('./middleware/errorHandler');
 const notFound = require('./middleware/notFound');
+const env =require('./config/env')
 
 
-const PORT=process.env.PORT||8000;
+const PORT=env.PORT||8000;
 
 async function startServer() {
     try {
