@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS pools;
+
+DROP TYPE IF EXISTS pool_status;

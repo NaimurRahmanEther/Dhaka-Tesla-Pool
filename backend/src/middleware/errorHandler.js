@@ -1,3 +1,4 @@
+const env=require('../config/env')
 const errorHandler= (err,req,res,next)=>{
     err.message=err.message||"Internal Server Error"
     err.statusCode=err.statusCode|| 500;
@@ -14,7 +15,7 @@ const errorHandler= (err,req,res,next)=>{
         message
     };
 
-    if(process.env.NODE_ENV==="development"){
+    if(env.NODE_ENV==="development"){
         Response.stack=err.stack
     }
     res.status(statusCode).json(Response)
