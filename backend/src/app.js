@@ -8,6 +8,7 @@ const userRoute = require("./modules/users/user.routes");
 const vehicleRouter=require("./modules/vehicles/vehicle.routes")
 const locationRouter=require("./modules/location/location.routes")
 const graphService=require("./modules/graph/graph.service")
+const rideRequest=require("./modules/rides/ride.routes")
 app.use(
   cors({
     origin: "http://localhost:5173",
@@ -44,5 +45,6 @@ app.use("/auth", authRouter);
 app.use("/users", userRoute);
 app.use("/vehicle",vehicleRouter)
 app.use("/location",locationRouter)
+app.use("/rides",rideRequest)
 
 module.exports = app;
