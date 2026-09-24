@@ -7,7 +7,7 @@ const authRouter = require("./modules/auth/auth.routes");
 const userRoute = require("./modules/users/user.routes");
 const vehicleRouter=require("./modules/vehicles/vehicle.routes")
 const locationRouter=require("./modules/location/location.routes")
-
+const graphService=require("./modules/graph/graph.service")
 app.use(
   cors({
     origin: "http://localhost:5173",
@@ -25,6 +25,21 @@ app.get("/", (req, res) => {
     message: "Dhaka Tesla Pool API is running",
   });
 });
+
+app.get(
+"/api/test-graph",
+async(req,res)=>{
+
+
+    const graph =
+    await graphService.getRoadGraph();
+
+
+    res.json(graph);
+
+
+});
+
 app.use("/auth", authRouter);
 app.use("/users", userRoute);
 app.use("/vehicle",vehicleRouter)
