@@ -6,6 +6,7 @@ const cookieParser = require("cookie-parser");
 const authRouter = require("./modules/auth/auth.routes");
 const userRoute = require("./modules/users/user.routes");
 const vehicleRouter=require("./modules/vehicles/vehicle.routes")
+const locationRouter=require("./modules/location/location.routes")
 
 app.use(
   cors({
@@ -27,5 +28,6 @@ app.get("/", (req, res) => {
 app.use("/auth", authRouter);
 app.use("/users", userRoute);
 app.use("/vehicle",vehicleRouter)
+app.use("/location",locationRouter)
 
 module.exports = app;

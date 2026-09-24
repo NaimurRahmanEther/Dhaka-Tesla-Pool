@@ -7,7 +7,9 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
      "migrate":   "node src/database/migrate.js",
-  "migrate:down": "node src/database/migrate.js down"
+  "migrate:down": "node src/database/migrate.js down",
+  "seed:locations":"node src/database/seeds/location.seed.js",
+    "seed:road": "node src/database/seeds/roadEdge.seed.js"
   },
   "keywords": [],
   "author": "",
