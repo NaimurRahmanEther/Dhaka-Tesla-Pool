@@ -1,178 +1,83 @@
-const findShortestPath = (
-    graph,
-    start,
-    destination
-)=>{
+const findShortestPath = (graph, start, destination) => {
+  const distances = {};
 
+  const previous = {};
 
-    const distances = {};
+  const visited = new Set();
 
-    const previous = {};
+  // Initial distance
 
-    const visited = new Set();
+  Object.keys(graph).forEach((node) => {
+    distances[node] = Infinity;
+  });
 
+  distances[start] = 0;
 
+  while (true) {
+    let currentNode = null;
 
-    // Initial distance
+    let smallestDistance = Infinity;
 
-    Object.keys(graph).forEach(node=>{
+    // Find nearest unvisited node
 
-        distances[node] = Infinity;
+    for (const node in distances) {
+      if (!visited.has(node) && distances[node] < smallestDistance) {
+        smallestDistance = distances[node];
 
-    });
-
-
-
-    distances[start] = 0;
-
-
-
-    while(true){
-
-
-        let currentNode = null;
-
-        let smallestDistance = Infinity;
-
-
-
-        // Find nearest unvisited node
-
-        for(const node in distances){
-
-
-            if(
-                !visited.has(node)
-                &&
-                distances[node] < smallestDistance
-            ){
-
-                smallestDistance =
-                distances[node];
-
-                currentNode = node;
-
-            }
-
-        }
-
-
-
-        // No path exists
-
-        if(currentNode === null){
-
-            break;
-
-        }
-
-
-
-        // Destination reached
-
-        if(
-            Number(currentNode)
-            ===
-            Number(destination)
-        ){
-
-            break;
-
-        }
-
-
-
-        visited.add(currentNode);
-
-
-
-        // Update neighbours
-
-        for(const neighbour of graph[currentNode]){
-
-
-            const newDistance =
-            distances[currentNode]
-            +
-            neighbour.distance;
-
-
-
-            if(
-                newDistance
-                <
-                distances[neighbour.node]
-            ){
-
-                distances[neighbour.node] =
-                newDistance;
-
-
-                previous[neighbour.node] =
-                currentNode;
-
-            }
-
-        }
-
+        currentNode = node;
+      }
     }
 
+    // No path exists
 
-
-    // Build route
-
-    const path=[];
-
-
-    let current =
-    destination;
-
-
-
-    while(current){
-
-
-        path.unshift(
-            Number(current)
-        );
-
-
-        current =
-        previous[current];
-
+    if (currentNode === null) {
+      break;
     }
 
+    // Destination reached
 
-
-    if(
-        path[0]
-        !==
-        Number(start)
-    ){
-
-        return null;
-
+    if (Number(currentNode) === Number(destination)) {
+      break;
     }
 
+    visited.add(currentNode);
 
+    // Update neighbours
 
-    return {
+    for (const neighbour of graph[currentNode]) {
+      const newDistance = distances[currentNode] + neighbour.distance;
 
-        distance:
-        distances[destination],
+      if (newDistance < distances[neighbour.node]) {
+        distances[neighbour.node] = newDistance;
 
+        previous[neighbour.node] = currentNode;
+      }
+    }
+  }
 
-        path
+  // Build route
 
-    };
+  const path = [];
 
+  let current = destination;
 
+  while (current) {
+    path.unshift(Number(current));
+
+    current = previous[current];
+  }
+
+  if (path[0] !== Number(start)) {
+    return null;
+  }
+
+  return {
+    distance: distances[destination],
+
+    path,
+  };
 };
 
-
-
 module.exports = {
-
-    findShortestPath
-
+  findShortestPath,
 };
