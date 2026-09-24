@@ -1,0 +1,13 @@
+CREATE TABLE locations (
+
+    id SERIAL PRIMARY KEY,
+
+    name VARCHAR(100) NOT NULL UNIQUE,
+
+    latitude DECIMAL(10,8),
+
+    longitude DECIMAL(11,8),
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+);
