@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+     "migrate":   "node src/database/migrate.js",
+  "migrate:down": "node src/database/migrate.js down"
   },
   "keywords": [],
   "author": "",
