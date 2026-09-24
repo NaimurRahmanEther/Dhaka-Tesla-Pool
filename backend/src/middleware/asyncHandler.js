@@ -4,4 +4,4 @@ const asyncHandler= (handler)=>{
         .catch(next)
     }
 }
-export default asyncHandler
+module.exports=asyncHandler

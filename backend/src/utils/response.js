@@ -1,4 +1,4 @@
-export const successResponse = (
+ const successResponse = (
     res,
     statusCode,
     message,

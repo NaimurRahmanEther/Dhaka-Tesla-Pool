@@ -1,3 +1,5 @@
+<<<<<<< Updated upstream
+=======
 require("dotenv").config();
 
 
@@ -23,9 +25,20 @@ const env = {
     },
 
 
-    JWT_SECRET: process.env.JWT_SECRET
+    JWT_SECRET: process.env.JWT_SECRET,
+    
+
+    JWT_ACCESS_SECRET:process.env.JWT_ACCESS_SECRET,
+
+JWT_REFRESH_SECRET:process.env.JWT_REFRESH_SECRET,
+
+
+ACCESS_TOKEN_EXPIRE:process.env.ACCESS_TOKEN_EXPIRE,
+
+REFRESH_TOKEN_EXPIRE:process.env.REFRESH_TOKEN_EXPIRE
 
 };
 
 
 module.exports = env;
+>>>>>>> Stashed changes
