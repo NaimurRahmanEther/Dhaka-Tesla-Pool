@@ -1,5 +1,3 @@
-<<<<<<< Updated upstream
-=======
 require("dotenv").config();
 
 
@@ -41,4 +39,3 @@ REFRESH_TOKEN_EXPIRE:process.env.REFRESH_TOKEN_EXPIRE
 
 
 module.exports = env;
->>>>>>> Stashed changes
