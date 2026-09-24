@@ -10,9 +10,9 @@ CREATE TABLE vehicles (
 
     driver_id INTEGER NOT NULL,
 
-    name VARCHAR(100) NOT NULL,
+    model VARCHAR(100) NOT NULL,
 
-    capacity INTEGER NOT NULL,
+    capacity INTEGER NOT NULL CHECK(capacity>0),
 
     status vehicle_status DEFAULT 'OFFLINE',
 
