@@ -1,64 +1,17 @@
-const router =
-require("express").Router();
+const router = require("express").Router();
 
+const controller = require("./auth.controller");
 
-const controller =
-require("./auth.controller");
+const validate = require("../../middleware/validate.middleware");
 
+const { registerSchema, loginSchema } = require("./auth.validation");
 
-const validate =
-require("../../middleware/validate.middleware");
+router.post("/register", validate(registerSchema), controller.register);
 
+router.post("/login", validate(loginSchema), controller.login);
 
-const {
-    registerSchema,
-    loginSchema
-}=require("./auth.validation");
+router.post("/refresh-token", controller.refreshToken);
 
+router.post("/logout", controller.logout);
 
-
-router.post(
-
-    "/register",
-
-    validate(registerSchema),
-
-    controller.register
-
-);
-
-
-
-router.post(
-
-    "/login",
-
-    validate(loginSchema),
-
-    controller.login
-
-);
-
-
-
-router.post(
-
-    "/refresh-token",
-
-    controller.refreshToken
-
-);
-
-
-
-router.post(
-
-    "/logout",
-
-    controller.logout
-
-);
-
-
-
-module.exports=router;
+module.exports = router;

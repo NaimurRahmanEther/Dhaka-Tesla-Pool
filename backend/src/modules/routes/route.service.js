@@ -1,16 +1,31 @@
 const routeRepository = require("./routes.repository");
 
+const graphService = require("../graph/graph.service");
+
 const AppError = require("../../utils/AppError");
 
 const createRoute = async (driverId, data) => {
+  const vehicle = await routeRepository.findDriverLocation(driverId);
+
+  if (!vehicle) {
+    throw new AppError("Driver vehicle not found", 404);
+  }
+
+  const route = await graphService.calculateDriverRoute({
+    currentLocationId: vehicle.current_location_id,
+    pickupLocationId: vehicle.current_location_id,
+    destinationLocationId: data.destinationLocationId,
+  });
+
+  if (!route) {
+    throw new AppError("Route calculation failed", 400);
+  }
+
   return routeRepository.createDriverRoute({
     driverId,
-
-    startLocationId: data.startLocationId,
-
+    startLocationId: vehicle.current_location_id,
     destinationLocationId: data.destinationLocationId,
-
-    route: data.route,
+    route,
   });
 };
 
@@ -26,6 +41,5 @@ const getDriverRoute = async (driverId) => {
 
 module.exports = {
   createRoute,
-
   getDriverRoute,
 };

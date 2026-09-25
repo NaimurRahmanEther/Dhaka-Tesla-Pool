@@ -8,23 +8,12 @@ const validate = require("../../middleware/validate.middleware");
 
 const { updateUserSchema } = require("./user.validation");
 
-console.log(updateUserSchema)
-
-router.get(
-  "/me",
-
-  authMiddleware,
-
-  controller.getProfile,
-);
+router.get("/me", authMiddleware, controller.getProfile);
 
 router.patch(
   "/me",
-
   authMiddleware,
-
   validate(updateUserSchema),
-
   controller.updateProfile,
 );
 

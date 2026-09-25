@@ -1,353 +1,142 @@
 const pool = require("../../database/db");
 
-
-
-
 // Find active pool and lock row
 
-const findActivePoolWithLock = async (
+const findActivePoolWithLock = async (client, poolId) => {
+  const result = await client.query(
+    `
+      SELECT
+          pools.*,
+          vehicles.capacity
+      FROM pools
+      JOIN vehicles
+      ON pools.vehicle_id = vehicles.id
+      WHERE pools.id=$1
+      AND pools.status='ACTIVE'
+      FOR UPDATE OF pools
+    `,
+    [poolId],
+  );
 
-    client,
-
-    poolId
-
-)=>{
-
-
-    const result =
-    await client.query(
-
-        `
-
-        SELECT
-
-            pools.*,
-
-            vehicles.capacity
-
-
-        FROM pools
-
-
-        JOIN vehicles
-
-        ON pools.vehicle_id = vehicles.id
-
-
-
-        WHERE pools.id=$1
-
-
-        AND pools.status='ACTIVE'
-
-
-        FOR UPDATE OF pools
-
-
-        `,
-
-        [
-
-            poolId
-
-        ]
-
-    );
-
-
-    return result.rows[0];
-
-
+  return result.rows[0];
 };
-
-
-
-
-
-
-
-
 
 // Calculate occupied seats
 
-const getOccupiedSeats = async (
+const getOccupiedSeats = async (client, poolId) => {
+  const result = await client.query(
+    `
+      SELECT
+      COALESCE(
+          SUM(seats_allocated),
+          0
+      ) AS occupied
+      FROM pool_rides
+      WHERE pool_id=$1
+    `,
+    [poolId],
+  );
 
-    client,
-
-    poolId
-
-)=>{
-
-
-    const result =
-    await client.query(
-
-        `
-
-        SELECT
-
-        COALESCE(
-
-            SUM(seats_allocated),
-
-            0
-
-        ) AS occupied
-
-
-        FROM pool_rides
-
-
-        WHERE pool_id=$1
-
-
-        `,
-
-
-        [
-
-            poolId
-
-        ]
-
-    );
-
-
-    return Number(
-
-        result.rows[0].occupied
-
-    );
-
-
+  return Number(result.rows[0].occupied);
 };
-
-
-
-
-
-
-
-
 
 // Add passenger ride into pool
 
-const addRideToPool = async (
+const addRideToPool = async (client, { poolId, rideId, seatsAllocated }) => {
+  const result = await client.query(
+    `
+      INSERT INTO pool_rides
+      (
+          pool_id,
+          ride_id,
+          seats_allocated
+      )
+      VALUES($1,$2,$3)
+      RETURNING *
+    `,
+    [poolId, rideId, seatsAllocated],
+  );
 
-    client,
-
-    {
-
-        poolId,
-
-        rideId,
-
-        seatsAllocated
-
-    }
-
-)=>{
-
-
-    const result =
-    await client.query(
-
-        `
-
-        INSERT INTO pool_rides
-
-        (
-
-            pool_id,
-
-            ride_id,
-
-            seats_allocated
-
-        )
-
-
-        VALUES($1,$2,$3)
-
-
-        RETURNING *
-
-
-        `,
-
-
-        [
-
-            poolId,
-
-            rideId,
-
-            seatsAllocated
-
-        ]
-
-    );
-
-
-    return result.rows[0];
-
-
+  return result.rows[0];
 };
-
-
-
-
-
-
-
-
 
 // Update optimized pool route
 
-const updatePoolRoute = async (
+const updatePoolRoute = async (client, { poolId, route }) => {
+  const result = await client.query(
+    `
+      UPDATE pools
+      SET
+          current_route=$1,
+          route_updated_at=CURRENT_TIMESTAMP
+      WHERE id=$2
+      RETURNING *
+    `,
+    [JSON.stringify(route), poolId],
+  );
 
-    client,
-
-    {
-
-        poolId,
-
-        route
-
-    }
-
-)=>{
-
-
-    const result =
-    await client.query(
-
-        `
-
-        UPDATE pools
-
-
-        SET
-
-
-            current_route=$1,
-
-
-            route_updated_at=CURRENT_TIMESTAMP
-
-
-
-        WHERE id=$2
-
-
-
-        RETURNING *
-
-
-        `,
-
-
-        [
-
-            JSON.stringify(route),
-
-            poolId
-
-        ]
-
-    );
-
-
-    return result.rows[0];
-
-
+  return result.rows[0];
 };
-
-
-
-
-
-
-
-
 
 // Update passenger fare
 
-const updateRideFare = async (
+const updateRideFare = async (client, { rideId, fare }) => {
+  const result = await client.query(
+    `
+      UPDATE rides
+      SET fare=$1
+      WHERE id=$2
+      RETURNING *
+    `,
+    [fare, rideId],
+  );
 
-    client,
-
-    {
-
-        rideId,
-
-        fare
-
-    }
-
-)=>{
-
-
-    const result =
-    await client.query(
-
-        `
-
-        UPDATE rides
-
-
-        SET fare=$1
-
-
-        WHERE id=$2
-
-
-        RETURNING *
-
-
-        `,
-
-
-        [
-
-            fare,
-
-            rideId
-
-        ]
-
-    );
-
-
-    return result.rows[0];
-
-
+  return result.rows[0];
 };
 
+// Get pool passengers for driver view
 
+const getPoolPassengers = async (poolId) => {
+  const result = await pool.query(
+    `
+      SELECT
+          pools.id AS pool_id,
+          vehicles.model,
+          vehicles.capacity,
+          users.name AS passenger_name,
+          rides.id AS ride_id,
+          rides.status AS ride_status,
+          rides.fare,
+          pickup.name AS pickup_location,
+          destination.name AS destination_location,
+          pool_rides.seats_allocated
+      FROM pools
+      JOIN vehicles
+      ON pools.vehicle_id = vehicles.id
+      JOIN pool_rides
+      ON pools.id = pool_rides.pool_id
+      JOIN rides
+      ON pool_rides.ride_id = rides.id
+      JOIN users
+      ON rides.passenger_id = users.id
+      JOIN locations pickup
+      ON rides.pickup_location_id = pickup.id
+      JOIN locations destination
+      ON rides.destination_location_id = destination.id
+      WHERE pools.id=$1
+      ORDER BY rides.requested_at ASC
+    `,
+    [poolId],
+  );
 
+  return result.rows;
+};
 
-
-
-
-
-
-module.exports={
-
-
-    findActivePoolWithLock,
-
-
-    getOccupiedSeats,
-
-
-    addRideToPool,
-
-
-    updatePoolRoute,
-
-
-    updateRideFare
-
-
+module.exports = {
+  findActivePoolWithLock,
+  getOccupiedSeats,
+  addRideToPool,
+  updatePoolRoute,
+  updateRideFare,
+  getPoolPassengers,
 };

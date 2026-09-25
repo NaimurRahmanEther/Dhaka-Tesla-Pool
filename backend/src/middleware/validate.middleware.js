@@ -1,39 +1,17 @@
-const AppError =
-require("../utils/AppError");
+const AppError = require("../utils/AppError");
 
+const validate = (schema) => {
+  return (req, res, next) => {
+    const result = schema.safeParse(req.body);
 
-const validate = (schema)=>{
+    if (!result.success) {
+      throw new AppError(result.error.errors[0].message, 400);
+    }
 
-    return (req,res,next)=>{
+    req.body = result.data;
 
-
-        const result =
-        schema.safeParse(req.body);
-
-
-
-        if(!result.success){
-
-
-            throw new AppError(
-
-                result.error.errors[0].message,
-
-                400
-
-            );
-
-        }
-
-
-        req.body=result.data;
-
-
-        next();
-
-    };
-
+    next();
+  };
 };
 
-
-module.exports=validate;
+module.exports = validate;

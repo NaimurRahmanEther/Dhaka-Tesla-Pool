@@ -1,155 +1,49 @@
 const MAX_DETOUR_DISTANCE = 5; // km
 
-
-
-
-
 // Calculate available seats
 
-const calculateAvailableSeats = (
-    capacity,
-    occupiedSeats
-) => {
-
-    return capacity - occupiedSeats;
-
+const calculateAvailableSeats = (capacity, occupiedSeats) => {
+  return capacity - occupiedSeats;
 };
-
-
-
-
-
-
 
 // Check seat availability
 
-const isSeatAvailable = (
-    capacity,
-    occupiedSeats,
-    requestedSeats
-) => {
+const isSeatAvailable = (capacity, occupiedSeats, requestedSeats) => {
+  const availableSeats = calculateAvailableSeats(capacity, occupiedSeats);
 
-
-    const availableSeats =
-    calculateAvailableSeats(
-        capacity,
-        occupiedSeats
-    );
-
-
-    return availableSeats >= requestedSeats;
-
+  return availableSeats >= requestedSeats;
 };
-
-
-
-
-
-
-
 
 // Calculate extra distance after adding passenger
 
-const calculateDetour = (
-    oldDistance,
-    newDistance
-) => {
-
-
-    return Math.max(
-        0,
-        newDistance - oldDistance
-    );
-
+const calculateDetour = (oldDistance, newDistance) => {
+  return Math.max(0, newDistance - oldDistance);
 };
-
-
-
-
-
-
-
 
 // Check whether passenger can join pool
 
-const isDetourAcceptable = (
-    oldDistance,
-    newDistance
-) => {
+const isDetourAcceptable = (oldDistance, newDistance) => {
+  const detour = calculateDetour(oldDistance, newDistance);
 
-
-    const detour =
-    calculateDetour(
-        oldDistance,
-        newDistance
-    );
-
-
-    return detour <= MAX_DETOUR_DISTANCE;
-
+  return detour <= MAX_DETOUR_DISTANCE;
 };
-
-
-
-
-
-
-
-
 
 // Calculate matching score
 
-const calculateMatchScore = ({
-    extraDistance,
-    availableSeats
-}) => {
+const calculateMatchScore = ({ extraDistance, availableSeats }) => {
+  let score = 100;
 
+  score -= extraDistance * 5;
 
-    let score = 100;
+  score += availableSeats * 2;
 
-
-
-
-    // Penalize additional travel
-
-    score -= extraDistance * 5;
-
-
-
-
-    // Prefer vehicles with more free seats
-
-    score += availableSeats * 2;
-
-
-
-    return score;
-
+  return score;
 };
 
-
-
-
-
-
-
-
 module.exports = {
-
-
-    calculateAvailableSeats,
-
-
-    isSeatAvailable,
-
-
-    calculateDetour,
-
-
-    isDetourAcceptable,
-
-
-    calculateMatchScore
-
-
+  calculateAvailableSeats,
+  isSeatAvailable,
+  calculateDetour,
+  isDetourAcceptable,
+  calculateMatchScore,
 };

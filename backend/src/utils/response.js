@@ -1,14 +1,9 @@
- const successResponse = (
-    res,
-    statusCode,
+const successResponse = (res, statusCode, message, data = null) => {
+  return res.status(statusCode).json({
+    success: true,
     message,
-    data = null
-) => {
-    return res.status(statusCode).json({
-        success: true,
-        message,
-        data
-    });
+    data,
+  });
 };
 
-module.exports=successResponse
+module.exports = successResponse;

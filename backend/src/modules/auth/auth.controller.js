@@ -4,66 +4,38 @@ const asyncHandler = require("../../middleware/asyncHandler");
 
 const register = asyncHandler(async (req, res) => {
   const user = await authService.register(req.body);
-
-  return successResponse(
-    res,
-    201,
-    "User registered successfully",
-    user
-  );
+  return successResponse(res, 201, "User registered successfully", user);
 });
 
 const login = asyncHandler(async (req, res) => {
   const { accessToken, refreshToken } = await authService.login(
     req.body.email,
-    req.body.password
+    req.body.password,
   );
-
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
     secure: false,
     sameSite: "strict",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
-
-  return successResponse(
-    res,
-    200,
-    "Login successful",
-    { accessToken }
-  );
+  return successResponse(res, 200, "Login successful", { accessToken });
 });
 
 const refreshToken = asyncHandler(async (req, res) => {
   const token = req.cookies.refreshToken;
-
   if (!token) {
     throw new Error("Refresh token missing");
   }
-
   const accessToken = await authService.refreshAccessToken(token);
-
-  return successResponse(
-    res,
-    200,
-    "Access token generated",
-    { accessToken }
-  );
+  return successResponse(res, 200, "Access token generated", { accessToken });
 });
 
 const logout = asyncHandler(async (req, res) => {
   const accessToken = req.headers.authorization?.split(" ")[1];
   const refreshToken = req.cookies.refreshToken;
-
   await authService.logout(accessToken, refreshToken);
-
   res.clearCookie("refreshToken");
-
-  return successResponse(
-    res,
-    200,
-    "Logout successful"
-  );
+  return successResponse(res, 200, "Logout successful");
 });
 
 module.exports = {

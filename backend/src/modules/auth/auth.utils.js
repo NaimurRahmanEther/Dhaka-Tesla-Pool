@@ -1,7 +1,6 @@
-
 const jwt = require("jsonwebtoken");
 const env = require("../../config/env");
-const bcrypt=require('bcrypt')
+const bcrypt = require("bcrypt");
 
 const hashPassword = async (password) => {
   return bcrypt.hash(password, 10);
@@ -17,9 +16,7 @@ const generateAccessToken = (user) => {
       id: user.id,
       role: user.role,
     },
-
     env.JWT_ACCESS_SECRET,
-
     {
       expiresIn: "15m",
     },
@@ -31,9 +28,7 @@ const generateRefreshToken = (user) => {
     {
       id: user.id,
     },
-
     env.JWT_REFRESH_SECRET,
-
     {
       expiresIn: "7d",
     },
@@ -41,31 +36,18 @@ const generateRefreshToken = (user) => {
 };
 
 const verifyAccessToken = (token) => {
-  return jwt.verify(
-    token,
-
-    env.JWT_ACCESS_SECRET,
-  );
+  return jwt.verify(token, env.JWT_ACCESS_SECRET);
 };
 
 const verifyRefreshToken = (token) => {
-  return jwt.verify(
-    token,
-
-    env.JWT_REFRESH_SECRET,
-  );
+  return jwt.verify(token, env.JWT_REFRESH_SECRET);
 };
 
 module.exports = {
   hashPassword,
-
   comparePassword,
-
   generateAccessToken,
-
   generateRefreshToken,
-
   verifyAccessToken,
-
   verifyRefreshToken,
 };

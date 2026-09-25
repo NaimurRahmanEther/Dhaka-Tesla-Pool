@@ -21,11 +21,8 @@ const register = async (data) => {
 
   const user = await authRepository.createUser({
     name: data.name,
-
     email: data.email,
-
     password: hashedPassword,
-
     role: data.role,
   });
 
@@ -39,11 +36,7 @@ const login = async (email, password) => {
     throw new AppError("Invalid email or password", 401);
   }
 
-  const isPasswordValid = await comparePassword(
-    password,
-
-    user.password_hash,
-  );
+  const isPasswordValid = await comparePassword(password, user.password_hash);
 
   if (!isPasswordValid) {
     throw new AppError("Invalid email or password", 401);
@@ -55,15 +48,12 @@ const login = async (email, password) => {
 
   await authRepository.saveRefreshToken({
     userId: user.id,
-
     token: refreshToken,
-
     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   });
 
   return {
     accessToken,
-
     refreshToken,
   };
 };
@@ -91,7 +81,6 @@ const refreshAccessToken = async (refreshToken) => {
 
   const user = {
     id: decoded.id,
-
     role: decoded.role,
   };
 
@@ -100,15 +89,10 @@ const refreshAccessToken = async (refreshToken) => {
   return newAccessToken;
 };
 
-const logout = async (
-  accessToken,
-
-  refreshToken,
-) => {
+const logout = async (accessToken, refreshToken) => {
   if (accessToken) {
     await authRepository.addBlacklistToken({
       token: accessToken,
-
       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     });
   }
@@ -116,7 +100,6 @@ const logout = async (
   if (refreshToken) {
     await authRepository.addBlacklistToken({
       token: refreshToken,
-
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
 
@@ -126,10 +109,7 @@ const logout = async (
 
 module.exports = {
   register,
-
   login,
-
   refreshAccessToken,
-
   logout,
 };
