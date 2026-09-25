@@ -11,6 +11,9 @@ require("../../middleware/auth.middleware");
 
 
 
+
+// Driver active trip
+
 router.get(
 
     "/my-active",
@@ -18,6 +21,38 @@ router.get(
     authMiddleware,
 
     controller.getActiveTrip
+
+);
+
+
+
+
+
+// Start trip
+
+router.patch(
+
+    "/:poolId/start",
+
+    authMiddleware,
+
+    controller.startTrip
+
+);
+
+
+
+
+
+// Complete trip
+
+router.patch(
+
+    "/:poolId/complete",
+
+    authMiddleware,
+
+    controller.completeTrip
 
 );
 

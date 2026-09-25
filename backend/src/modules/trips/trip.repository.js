@@ -1,10 +1,14 @@
 const pool = require("../../database/db");
 
+
 // Get driver's active pool with passengers
 
 const findActivePoolByDriverId = async (driverId) => {
-  const result = await pool.query(
-    `
+
+    const result =
+    await pool.query(
+
+        `
         SELECT
 
             pools.id AS pool_id,
@@ -21,12 +25,14 @@ const findActivePoolByDriverId = async (driverId) => {
 
             users.name AS passenger_name,
 
+
             rides.id AS ride_id,
 
             rides.status AS ride_status,
 
 
             pickup.name AS pickup_location,
+
 
             destination.name AS destination_location,
 
@@ -76,6 +82,7 @@ const findActivePoolByDriverId = async (driverId) => {
 
         WHERE pools.driver_id=$1
 
+
         AND pools.status='ACTIVE'
 
 
@@ -83,12 +90,247 @@ const findActivePoolByDriverId = async (driverId) => {
 
         `,
 
-    [driverId],
-  );
+        [
+            driverId
+        ]
 
-  return result.rows;
+    );
+
+
+    return result.rows;
+
 };
 
+
+
+
+
+// Start trip
+
+const startTrip = async (
+
+    client,
+
+    poolId
+
+) => {
+
+
+    const result =
+    await client.query(
+
+        `
+        UPDATE rides
+
+
+        SET status='ONGOING'
+
+
+        WHERE id IN
+
+        (
+
+            SELECT ride_id
+
+            FROM pool_rides
+
+            WHERE pool_id=$1
+
+        )
+
+
+        RETURNING *
+
+        `,
+
+        [
+            poolId
+        ]
+
+    );
+
+
+    return result.rows;
+
+};
+
+
+
+
+
+// Complete trip
+
+const completeTrip = async (
+
+    client,
+
+    poolId
+
+) => {
+
+
+    const result =
+    await client.query(
+
+        `
+        UPDATE rides
+
+
+        SET
+
+        status='COMPLETED',
+
+        completed_at=CURRENT_TIMESTAMP
+
+
+        WHERE id IN
+
+        (
+
+            SELECT ride_id
+
+            FROM pool_rides
+
+            WHERE pool_id=$1
+
+        )
+
+
+        RETURNING *
+
+        `,
+
+        [
+            poolId
+        ]
+
+    );
+
+
+    return result.rows;
+
+};
+
+
+
+
+
+// Complete pool
+
+const completePool = async (
+
+    client,
+
+    poolId
+
+) => {
+
+
+    const result =
+    await client.query(
+
+        `
+        UPDATE pools
+
+
+        SET
+
+        status='COMPLETED',
+
+        completed_at=CURRENT_TIMESTAMP
+
+
+        WHERE id=$1
+
+
+        RETURNING *
+
+        `,
+
+        [
+            poolId
+        ]
+
+    );
+
+
+    return result.rows[0];
+
+};
+
+
+
+
+
+// Create ride history
+
+const createRideHistory = async (
+
+    client,
+
+    {
+        rideId,
+        actorId,
+        action
+    }
+
+) => {
+
+
+    const result =
+    await client.query(
+
+        `
+        INSERT INTO ride_history
+
+        (
+            ride_id,
+
+            actor_id,
+
+            action
+
+        )
+
+
+        VALUES($1,$2,$3)
+
+
+        RETURNING *
+
+        `,
+
+        [
+
+            rideId,
+
+            actorId,
+
+            action
+
+        ]
+
+    );
+
+
+    return result.rows[0];
+
+};
+
+
+
+
+
 module.exports = {
-  findActivePoolByDriverId,
+
+    findActivePoolByDriverId,
+
+    startTrip,
+
+    completeTrip,
+
+    completePool,
+
+    createRideHistory
+
 };
