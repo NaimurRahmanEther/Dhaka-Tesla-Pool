@@ -1,141 +1,394 @@
 const MAX_DETOUR_DISTANCE = 5;
 
-// Calculate extra distance after adding passenger
 
-const calculateDetour = (oldDistance, newDistance) => {
-  return newDistance - oldDistance;
+
+
+// Calculate extra distance
+
+const calculateDetour = (
+    oldDistance,
+    newDistance
+)=>{
+
+    return Math.max(
+        0,
+        newDistance - oldDistance
+    );
+
 };
 
-// Check whether passenger can join pool
 
-const isDetourAcceptable = (oldDistance, newDistance) => {
-  const detour = calculateDetour(oldDistance, newDistance);
 
-  return detour <= MAX_DETOUR_DISTANCE;
+
+
+
+// Check detour limit
+
+const isDetourAcceptable = (
+    oldDistance,
+    newDistance
+)=>{
+
+
+    const detour =
+    calculateDetour(
+        oldDistance,
+        newDistance
+    );
+
+
+    return detour <= MAX_DETOUR_DISTANCE;
+
+
 };
 
-// Check if passenger route already exists inside pool route
 
-const isRouteCompatible = (poolRoute, pickupLocation, destinationLocation) => {
-  const pickupIndex = poolRoute.indexOf(pickupLocation);
 
-  const destinationIndex = poolRoute.indexOf(destinationLocation);
 
-  if (pickupIndex === -1 || destinationIndex === -1) {
-    return false;
-  }
 
-  return pickupIndex < destinationIndex;
-};
 
-// Insert passenger pickup and destination
-// into existing route
 
-const insertPassengerRoute = (
-  currentRoute,
-  pickupLocation,
-  destinationLocation,
-) => {
-  const newRoute = [...currentRoute];
 
-  const pickupIndex = newRoute.indexOf(pickupLocation);
 
-  const destinationIndex = newRoute.indexOf(destinationLocation);
+// Check whether pickup and destination
+// are after current Tesla position
 
-  /*
-        If pickup does not exist,
-        insert before destination
-    */
+const isFutureStop = (
 
-  if (pickupIndex === -1) {
-    if (destinationIndex !== -1) {
-      newRoute.splice(destinationIndex, 0, pickupLocation);
-    } else {
-      newRoute.push(pickupLocation);
+    currentRoute,
+
+    currentIndex,
+
+    pickupLocation,
+
+    destinationLocation
+
+)=>{
+
+
+    const pickupIndex =
+    currentRoute.indexOf(
+        pickupLocation
+    );
+
+
+    const destinationIndex =
+    currentRoute.indexOf(
+        destinationLocation
+    );
+
+
+
+
+    if(
+        pickupIndex === -1 ||
+        destinationIndex === -1
+    ){
+
+        return false;
+
     }
-  }
 
-  /*
-        Add destination
+
+
+
+
+
+    /*
+        Passenger pickup must be
+        ahead of Tesla
+
+        Example:
+
+        Current:
+        C(index 2)
+
+        Pickup:
+        B(index 1)
+
+        Reject
+
     */
 
-  if (!newRoute.includes(destinationLocation)) {
-    newRoute.push(destinationLocation);
-  }
 
-  return newRoute;
+    if(
+        pickupIndex < currentIndex
+    ){
+
+        return false;
+
+    }
+
+
+
+
+
+
+
+    /*
+        Destination must be after pickup
+
+    */
+
+
+    if(
+        destinationIndex <= pickupIndex
+    ){
+
+        return false;
+
+    }
+
+
+
+    return true;
+
+
 };
 
-// Generate possible passenger insertion routes
+
+
+
+
+
+
+
+
+
+
+
+// Generate possible insertion routes
 
 const generatePossibleRoutes = (
-  currentRoute,
-  pickupLocation,
-  destinationLocation,
-) => {
-  const possibleRoutes = [];
 
-  for (let i = 0; i <= currentRoute.length; i++) {
-    const routeWithPickup = [
-      ...currentRoute.slice(0, i),
+    currentRoute,
 
-      pickupLocation,
+    currentIndex,
 
-      ...currentRoute.slice(i),
-    ];
+    pickupLocation,
 
-    for (let j = i + 1; j <= routeWithPickup.length; j++) {
-      const routeWithDestination = [
-        ...routeWithPickup.slice(0, j),
+    destinationLocation
 
-        destinationLocation,
+)=>{
 
-        ...routeWithPickup.slice(j),
-      ];
 
-      possibleRoutes.push(routeWithDestination);
+    const possibleRoutes=[];
+
+
+
+    /*
+        Only consider future part
+
+        Example:
+
+        Route:
+
+        A B C D E
+
+        Current:
+
+        C
+
+
+        We only use:
+
+        C D E
+
+    */
+
+
+    const activeRoute =
+    currentRoute.slice(
+        currentIndex
+    );
+
+
+
+
+
+
+
+    for(
+        let pickupIndex=0;
+
+        pickupIndex<=activeRoute.length;
+
+        pickupIndex++
+
+    ){
+
+
+
+        const routeWithPickup=[
+
+
+            ...currentRoute.slice(
+                0,
+                currentIndex
+            ),
+
+
+
+            ...activeRoute.slice(
+                0,
+                pickupIndex
+            ),
+
+
+
+            pickupLocation,
+
+
+
+            ...activeRoute.slice(
+                pickupIndex
+            )
+
+        ];
+
+
+
+
+
+
+
+        for(
+            let destinationIndex=
+            pickupIndex+1;
+
+
+            destinationIndex<=
+            activeRoute.length+1;
+
+
+            destinationIndex++
+
+        ){
+
+
+
+            const routeWithDestination=[
+
+
+                ...routeWithPickup.slice(
+                    0,
+                    currentIndex +
+                    destinationIndex
+                ),
+
+
+
+                destinationLocation,
+
+
+
+                ...routeWithPickup.slice(
+                    currentIndex +
+                    destinationIndex
+                )
+
+
+            ];
+
+
+
+
+
+
+            possibleRoutes.push(
+                routeWithDestination
+            );
+
+        }
+
     }
-  }
 
-  return possibleRoutes;
+
+
+
+
+    return possibleRoutes;
+
+
 };
 
-// Select best route based on minimum distance
 
-const findBestRoute = (routes, distanceMap) => {
-  let bestRoute = null;
 
-  let minimumDistance = Infinity;
 
-  for (const route of routes) {
-    const key = JSON.stringify(route);
 
-    const distance = distanceMap[key];
 
-    if (distance < minimumDistance) {
-      minimumDistance = distance;
 
-      bestRoute = route;
+
+
+
+
+// Select shortest route
+
+const findBestRoute = (
+    routes
+)=>{
+
+
+    if(
+        !routes.length
+    ){
+
+        return null;
+
     }
-  }
 
-  return {
-    route: bestRoute,
 
-    distance: minimumDistance,
-  };
+
+
+    return routes.reduce(
+
+        (best,current)=>{
+
+
+            if(
+                current.distance <
+                best.distance
+            ){
+
+                return current;
+
+            }
+
+
+            return best;
+
+
+        }
+
+    );
+
+
 };
 
-module.exports = {
-  calculateDetour,
 
-  isDetourAcceptable,
 
-  isRouteCompatible,
 
-  insertPassengerRoute,
 
-  generatePossibleRoutes,
 
-  findBestRoute,
+
+
+
+module.exports={
+
+
+    calculateDetour,
+
+
+    isDetourAcceptable,
+
+
+    isFutureStop,
+
+
+    generatePossibleRoutes,
+
+
+    findBestRoute
+
+
 };

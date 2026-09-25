@@ -13,6 +13,7 @@ const driverRoute=require("./modules/routes/route.routes")
 const matchingRoute=require("./modules/matching/matching.routes")
 const poolingRoute=require("./modules/pools/pooling.routes")
 const tripRoute=require('./modules/trips/trip.routes')
+const historyRoute=require("./modules/history/history.routes")
 app.use(
   cors({
     origin: "http://localhost:5173",
@@ -41,5 +42,6 @@ app.use("/matching",matchingRoute)
 app.use("/pool",poolingRoute);
 
 app.use("/api/trips",tripRoute);
+app.use("/api/history",historyRoute);
 
 module.exports = app;

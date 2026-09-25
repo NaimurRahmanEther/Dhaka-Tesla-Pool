@@ -1,39 +1,76 @@
 const pool = require("../../database/db");
 
+
+
 // Create vehicle
-const createVehicle = async ({ driverId, model, capacity }) => {
-  const result = await pool.query(
-    `
+
+const createVehicle = async ({
+    driverId,
+    model,
+    capacity,
+    currentLocationId
+}) => {
+
+
+    const result = await pool.query(
+
+        `
         INSERT INTO vehicles
         (
             driver_id,
             model,
-            capacity
+            capacity,
+            current_location_id
         )
 
+
         SELECT
+
             id,
             $2,
-            $3
+            $3,
+            $4
+
 
         FROM users
 
-        WHERE id = $1
-        AND role = 'DRIVER'
+
+        WHERE id=$1
+
+        AND role='DRIVER'
+
 
         RETURNING *
-    `,
-    [driverId, model, capacity],
-  );
 
-  return result.rows[0];
+        `,
+
+
+        [
+            driverId,
+            model,
+            capacity,
+            currentLocationId
+        ]
+
+    );
+
+
+    return result.rows[0];
+
 };
+
+
+
+
 
 // Find vehicle by driver
 
-const findVehicleByDriverId = async (driverId) => {
-  const result = await pool.query(
-    `
+const findVehicleByDriverId = async(driverId)=>{
+
+
+    const result = await pool.query(
+
+        `
         SELECT *
 
         FROM vehicles
@@ -42,17 +79,29 @@ const findVehicleByDriverId = async (driverId) => {
 
         `,
 
-    [driverId],
-  );
+        [
+            driverId
+        ]
 
-  return result.rows[0];
+    );
+
+
+    return result.rows[0];
+
 };
+
+
+
+
 
 // Find vehicle by id
 
-const findVehicleById = async (id) => {
-  const result = await pool.query(
-    `
+const findVehicleById = async(id)=>{
+
+
+    const result = await pool.query(
+
+        `
         SELECT *
 
         FROM vehicles
@@ -61,42 +110,84 @@ const findVehicleById = async (id) => {
 
         `,
 
-    [id],
-  );
+        [
+            id
+        ]
 
-  return result.rows[0];
+    );
+
+
+    return result.rows[0];
+
 };
+
+
+
+
 
 // Update vehicle
 
-const updateVehicle = async (id, { model, capacity }) => {
-  const result = await pool.query(
-    `
+const updateVehicle = async(
+    id,
+    {
+        model,
+        capacity,
+        currentLocationId
+    }
+)=>{
+
+
+    const result = await pool.query(
+
+        `
         UPDATE vehicles
 
         SET
-            model=$1,
-            capacity=$2
+
+            model=COALESCE($1,model),
+
+            capacity=COALESCE($2,capacity),
+
+            current_location_id=
+            COALESCE($3,current_location_id)
 
 
-        WHERE id=$3
+        WHERE id=$4
 
 
         RETURNING *
 
         `,
 
-    [model, capacity, id],
-  );
+        [
+            model,
+            capacity,
+            currentLocationId,
+            id
+        ]
 
-  return result.rows[0];
+    );
+
+
+    return result.rows[0];
+
 };
+
+
+
+
 
 // Update status
 
-const updateVehicleStatus = async (driverId, status) => {
-  const result = await pool.query(
-    `
+const updateVehicleStatus = async(
+    driverId,
+    status
+)=>{
+
+
+    const result = await pool.query(
+
+        `
         UPDATE vehicles
 
         SET status=$1
@@ -109,20 +200,38 @@ const updateVehicleStatus = async (driverId, status) => {
 
         `,
 
-    [status, driverId],
-  );
 
-  return result.rows[0];
+        [
+            status,
+            driverId
+        ]
+
+    );
+
+
+    return result.rows[0];
+
 };
 
-module.exports = {
-  createVehicle,
 
-  findVehicleByDriverId,
 
-  findVehicleById,
 
-  updateVehicle,
 
-  updateVehicleStatus,
+module.exports={
+
+
+    createVehicle,
+
+
+    findVehicleByDriverId,
+
+
+    findVehicleById,
+
+
+    updateVehicle,
+
+
+    updateVehicleStatus
+
 };

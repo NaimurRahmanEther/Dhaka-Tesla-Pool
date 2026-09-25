@@ -1,10 +1,16 @@
 const pool = require("../../database/db");
 
-// Find available Tesla drivers
+
+
+// Find available Tesla vehicles
 
 const findAvailableVehicles = async () => {
-  const result = await pool.query(
-    `
+
+
+    const result =
+    await pool.query(
+
+        `
         SELECT
 
             vehicles.id AS vehicle_id,
@@ -13,6 +19,7 @@ const findAvailableVehicles = async () => {
 
             vehicles.driver_id,
 
+            vehicles.current_location_id,
 
             users.name AS driver_name
 
@@ -27,17 +34,31 @@ const findAvailableVehicles = async () => {
 
         WHERE vehicles.status='ONLINE'
 
-        `,
-  );
+        `
 
-  return result.rows;
+    );
+
+
+    return result.rows;
+
 };
+
+
+
+
+
+
+
 
 // Find active pool of vehicle
 
-const findActivePoolByVehicleId = async (vehicleId) => {
-  const result = await pool.query(
-    `
+const findActivePoolByVehicleId = async(vehicleId)=>{
+
+
+    const result =
+    await pool.query(
+
+        `
         SELECT *
 
         FROM pools
@@ -48,109 +69,149 @@ const findActivePoolByVehicleId = async (vehicleId) => {
 
         `,
 
-    [vehicleId],
-  );
 
-  return result.rows[0];
+        [
+            vehicleId
+        ]
+
+    );
+
+
+    return result.rows[0];
+
 };
 
-// Create new pool
 
-const createPool = async ({ vehicleId, driverId }) => {
-  const result = await pool.query(
-    `
-        INSERT INTO pools
-        (
-            vehicle_id,
-            driver_id,
-            status
-        )
 
-        VALUES($1,$2,'ACTIVE')
 
-        RETURNING *
+
+
+
+
+// Get rides already inside pool
+
+const getPoolRides = async(poolId)=>{
+
+
+    const result =
+    await pool.query(
+
+        `
+        SELECT *
+
+        FROM pool_rides
+
+        WHERE pool_id=$1
 
         `,
 
-    [vehicleId, driverId],
-  );
 
-  return result.rows[0];
+        [
+            poolId
+        ]
+
+    );
+
+
+    return result.rows;
+
 };
 
-// Add ride into pool
 
-const addRideToPool = async ({ poolId, rideId, seatsAllocated }) => {
-  const result = await pool.query(
-    `
-        INSERT INTO pool_rides
-        (
-            pool_id,
-            ride_id,
-            seats_allocated
-        )
 
-        VALUES($1,$2,$3)
 
-        RETURNING *
 
-        `,
 
-    [poolId, rideId, seatsAllocated],
-  );
 
-  return result.rows[0];
-};
 
-// Update ride status
 
-const updateRideStatus = async (rideId) => {
-  const result = await pool.query(
-    `
+// Update ride fare
+
+const updateRideFare = async(
+    rideId,
+    fare
+)=>{
+
+
+    const result =
+    await pool.query(
+
+        `
         UPDATE rides
 
-        SET status='MATCHED'
+        SET fare=$1
 
-
-        WHERE id=$1
-
+        WHERE id=$2
 
         RETURNING *
 
         `,
 
-    [rideId],
-  );
 
-  return result.rows[0];
+        [
+            fare,
+            rideId
+        ]
+
+    );
+
+
+    return result.rows[0];
+
 };
 
-// Assign ride to pool with transaction + concurrency control
 
-const assignRideToPool = async ({
-  vehicleId,
 
-  driverId,
 
-  rideId,
 
-  seatsAllocated,
-}) => {
-  const client = await pool.connect();
 
-  try {
-    await client.query("BEGIN");
 
-    /*
+
+
+// Assign ride to pool
+
+const assignRideToPool = async({
+
+
+    vehicleId,
+
+    driverId,
+
+    rideId,
+
+    seatsAllocated,
+
+    route
+
+
+})=>{
+
+
+    const client =
+    await pool.connect();
+
+
+
+    try{
+
+
+        await client.query(
+            "BEGIN"
+        );
+
+
+
+
+
+        /*
             Lock vehicle row
 
-            Prevents two passengers
-            booking same Tesla seats
-            at the same time
         */
 
-    const vehicleResult = await client.query(
-      `
+        const vehicleResult =
+        await client.query(
+
+            `
             SELECT *
 
             FROM vehicles
@@ -161,21 +222,46 @@ const assignRideToPool = async ({
 
             `,
 
-      [vehicleId],
-    );
 
-    const vehicle = vehicleResult.rows[0];
+            [
+                vehicleId
+            ]
 
-    if (!vehicle) {
-      throw new Error("Vehicle not found");
-    }
+        );
 
-    /*
-            Check current pool
+
+
+
+        if(!vehicleResult.rows.length){
+
+            throw new Error(
+                "Vehicle not found"
+            );
+
+        }
+
+
+
+
+
+        const vehicle =
+        vehicleResult.rows[0];
+
+
+
+
+
+
+
+        /*
+            Lock active pool
+
         */
 
-    let poolResult = await client.query(
-      `
+        const poolResult =
+        await client.query(
+
+            `
             SELECT *
 
             FROM pools
@@ -184,103 +270,275 @@ const assignRideToPool = async ({
 
             AND status='ACTIVE'
 
+            FOR UPDATE
+
             `,
 
-      [vehicleId],
-    );
 
-    let activePool = poolResult.rows[0];
+            [
+                vehicleId
+            ]
 
-    /*
-            Create pool if driver
-            does not have active pool
+        );
+
+
+
+
+        let activePool =
+        poolResult.rows[0];
+
+
+
+
+
+
+
+        /*
+            Create pool
+
         */
 
-    if (!activePool) {
-      poolResult = await client.query(
-        `
+        if(!activePool){
+
+
+            const newPool =
+            await client.query(
+
+                `
                 INSERT INTO pools
+
                 (
                     vehicle_id,
+
                     driver_id,
-                    status
+
+                    status,
+
+                    capacity,
+
+                    current_route
+
                 )
 
-                VALUES($1,$2,'ACTIVE')
+
+                VALUES
+
+                (
+                    $1,
+
+                    $2,
+
+                    'ACTIVE',
+
+                    $3,
+
+                    $4
+
+                )
+
 
                 RETURNING *
 
                 `,
 
-        [vehicleId, driverId],
-      );
 
-      activePool = poolResult.rows[0];
-    }
+                [
 
-    /*
-            Insert passenger ride
-            into pool
+                    vehicleId,
+
+                    driverId,
+
+                    vehicle.capacity,
+
+                    JSON.stringify(route)
+
+                ]
+
+            );
+
+
+
+            activePool =
+            newPool.rows[0];
+
+
+        }
+
+
+
+
+
+
+
+
+        /*
+            Insert ride into pool
+
         */
 
-    const poolRideResult = await client.query(
-      `
+
+        const poolRide =
+        await client.query(
+
+            `
             INSERT INTO pool_rides
+
             (
                 pool_id,
+
                 ride_id,
+
                 seats_allocated
+
             )
 
-            VALUES($1,$2,$3)
+
+            VALUES
+
+            (
+                $1,
+
+                $2,
+
+                $3
+
+            )
+
 
             RETURNING *
 
             `,
 
-      [activePool.id, rideId, seatsAllocated],
-    );
 
-    /*
+            [
+
+                activePool.id,
+
+                rideId,
+
+                seatsAllocated
+
+            ]
+
+        );
+
+
+
+
+
+
+
+
+
+        /*
             Update ride status
 
         */
 
-    await client.query(
-      `
+
+        const updatedRide =
+        await client.query(
+
+            `
             UPDATE rides
 
             SET status='MATCHED'
 
             WHERE id=$1
 
+            RETURNING *
+
             `,
 
-      [rideId],
-    );
 
-    await client.query("COMMIT");
+            [
+                rideId
+            ]
 
-    return poolRideResult.rows[0];
-  } catch (error) {
-    await client.query("ROLLBACK");
+        );
 
-    throw error;
-  } finally {
-    client.release();
-  }
+
+
+
+
+
+        await client.query(
+            "COMMIT"
+        );
+
+
+
+
+
+        return {
+
+
+            pool:activePool,
+
+
+            poolRide:
+            poolRide.rows[0],
+
+
+            ride:
+            updatedRide.rows[0]
+
+
+        };
+
+
+
+    }
+
+
+    catch(error){
+
+
+        await client.query(
+            "ROLLBACK"
+        );
+
+
+        throw error;
+
+
+    }
+
+
+    finally{
+
+
+        client.release();
+
+
+    }
+
+
 };
 
-module.exports = {
-  findAvailableVehicles,
 
-  findActivePoolByVehicleId,
 
-  createPool,
 
-  addRideToPool,
 
-  updateRideStatus,
 
-  assignRideToPool,
+
+
+module.exports={
+
+
+    findAvailableVehicles,
+
+
+    findActivePoolByVehicleId,
+
+
+    getPoolRides,
+
+
+    updateRideFare,
+
+
+    assignRideToPool
+
+
 };

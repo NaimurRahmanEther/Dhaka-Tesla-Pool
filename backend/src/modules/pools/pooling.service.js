@@ -1,21 +1,35 @@
-const pool = require("../../database/db");
+const pool =
+require("../../database/db");
+
 
 
 const poolingRepository =
 require("./pooling.repository");
 
 
+
 const {
-    generatePossibleRoutes,
+
     findBestRoute,
+
     isDetourAcceptable
 
-} =
+
+}
+
+=
 require("./pooling.algorithm");
+
 
 
 const graphService =
 require("../graph/graph.service");
+
+
+
+const fareService =
+require("../fare/fare.service");
+
 
 
 const AppError =
@@ -25,45 +39,69 @@ require("../../utils/AppError");
 
 
 
+
+
+
+
 const addPassengerToPool = async ({
+
 
     poolId,
 
     ride
 
+
 }) => {
 
 
+
     const client =
+
     await pool.connect();
 
 
 
-    try {
+
+
+
+    try{
 
 
         await client.query(
+
             "BEGIN"
+
         );
+
+
+
+
+
+
 
 
 
         /*
-            1.
-            Lock pool row
+            Lock pool
 
-            Prevent two passengers
-            updating same pool
         */
 
+
         const activePool =
+
         await poolingRepository.findActivePoolWithLock(
+
 
             client,
 
+
             poolId
 
+
         );
+
+
+
 
 
 
@@ -72,9 +110,12 @@ const addPassengerToPool = async ({
 
             throw new AppError(
 
+
                 "Active pool not found",
 
+
                 404
+
 
             );
 
@@ -84,41 +125,63 @@ const addPassengerToPool = async ({
 
 
 
+
+
+
+
         /*
-            2.
-            Check available seats
+            Seat check
 
         */
 
 
         const occupiedSeats =
+
         await poolingRepository.getOccupiedSeats(
+
 
             client,
 
+
             poolId
 
+
         );
+
+
 
 
 
         const availableSeats =
+
+
         activePool.capacity -
+
         occupiedSeats;
 
 
 
+
+
+
         if(
+
             availableSeats <
+
             ride.seats_requested
+
         ){
 
 
+
             throw new AppError(
+
 
                 "Not enough seats available",
 
+
                 400
+
 
             );
 
@@ -128,132 +191,43 @@ const addPassengerToPool = async ({
 
 
 
-        /*
-            3.
-            Get current pool route
 
-        */
+
 
 
         if(
+
             !activePool.current_route
+
         ){
 
 
             throw new AppError(
 
+
                 "Pool route not found",
 
+
                 400
+
 
             );
 
         }
+
+
+
+
+
+
 
 
 
         const currentRoute =
-        activePool.current_route.path;
+
+        activePool.current_route;
 
 
-
-        const oldDistance =
-        activePool.current_route.distance;
-
-
-
-
-
-        /*
-            4.
-            Generate possible routes
-
-            Example:
-
-            A-B-C-D-E
-
-
-            New passenger:
-
-            C-X
-
-
-            Possible:
-
-            A-B-C-X-D-E
-
-            A-B-C-D-X-E
-
-        */
-
-
-        const possibleRoutes =
-        generatePossibleRoutes(
-
-            currentRoute,
-
-            ride.pickup_location_id,
-
-            ride.destination_location_id
-
-        );
-
-
-
-
-
-        if(
-            !possibleRoutes.length
-        ){
-
-
-            throw new AppError(
-
-                "No possible route found",
-
-                400
-
-            );
-
-        }
-
-
-
-
-
-
-        /*
-            5.
-            Calculate distance
-            for every possible route
-
-        */
-
-
-        const distanceMap = {};
-
-
-
-        for(
-            const route of possibleRoutes
-        ){
-
-
-            const result =
-            await graphService.calculateRouteDistance(
-
-                route
-
-            );
-
-
-
-            distanceMap[
-                JSON.stringify(route)
-            ] = result;
-
-
-        }
 
 
 
@@ -262,35 +236,54 @@ const addPassengerToPool = async ({
 
 
         /*
-            6.
-            Select shortest route
+            Optimize route
 
         */
 
 
         const bestRoute =
-        findBestRoute(
 
-            possibleRoutes,
-
-            distanceMap
-
-        );
+        await findBestRoute({
 
 
+            currentRoute:
+
+            currentRoute.path,
 
 
 
-        if(
-            !bestRoute.route
-        ){
+            pickup:
+
+            ride.pickup_location_id,
+
+
+
+            destination:
+
+            ride.destination_location_id
+
+
+
+        });
+
+
+
+
+
+
+
+
+        if(!bestRoute){
 
 
             throw new AppError(
 
-                "Cannot optimize route",
+
+                "No possible route found",
+
 
                 400
+
 
             );
 
@@ -302,21 +295,28 @@ const addPassengerToPool = async ({
 
 
 
+
+
         /*
-            7.
-            Check detour limit
+            Detour check
 
         */
 
 
         const acceptable =
+
         isDetourAcceptable(
 
-            oldDistance,
+
+            currentRoute.distance,
+
 
             bestRoute.distance
 
+
         );
+
+
 
 
 
@@ -326,9 +326,12 @@ const addPassengerToPool = async ({
 
             throw new AppError(
 
+
                 "Passenger creates too much detour",
 
+
                 400
+
 
             );
 
@@ -340,31 +343,106 @@ const addPassengerToPool = async ({
 
 
 
+
+
         /*
-            8.
-            Add passenger into pool
+            Calculate passenger own distance
+
+            Apply pool discount
+
+        */
+
+
+        const passengerDistance =
+
+
+        await graphService.calculateRouteDistance([
+
+
+            ride.pickup_location_id,
+
+
+            ride.destination_location_id
+
+
+
+        ]);
+
+
+
+
+
+
+
+
+
+        const fareResult =
+
+
+        await fareService.calculateRideFare({
+
+
+
+            distance:
+
+            passengerDistance,
+
+
+
+            isPool:true
+
+
+
+        });
+
+
+
+
+
+
+
+
+
+        /*
+            Add passenger
 
         */
 
 
         const poolRide =
+
+
         await poolingRepository.addRideToPool(
+
+
 
             client,
 
+
+
             {
+
+
 
                 poolId,
 
 
+
                 rideId:
+
                 ride.id,
 
 
+
                 seatsAllocated:
+
                 ride.seats_requested
 
+
+
             }
+
+
 
         );
 
@@ -374,34 +452,56 @@ const addPassengerToPool = async ({
 
 
 
+
+
         /*
-            9.
             Update pool route
 
         */
 
 
+        const updatedPool =
+
+
         await poolingRepository.updatePoolRoute(
+
+
 
             client,
 
+
+
             {
+
+
 
                 poolId,
 
 
+
                 route:{
 
+
+
                     path:
+
                     bestRoute.route,
 
 
+
                     distance:
+
                     bestRoute.distance
+
+
 
                 }
 
+
+
             }
+
+
 
         );
 
@@ -411,33 +511,96 @@ const addPassengerToPool = async ({
 
 
 
+
+
         /*
-            10.
+            Save fare
+
+        */
+
+
+        await poolingRepository.updateRideFare(
+
+
+
+            client,
+
+
+
+            {
+
+
+
+                rideId:
+
+                ride.id,
+
+
+
+                fare:
+
+                fareResult.fare
+
+
+
+            }
+
+
+
+        );
+
+
+
+
+
+
+
+
+
+        /*
             Update ride status
 
         */
 
 
+        const updatedRide =
+
+
         await client.query(
+
+
 
             `
 
             UPDATE rides
+
 
             SET status='MATCHED'
 
 
             WHERE id=$1
 
+
+            RETURNING *
+
+
             `,
+
+
 
             [
 
+
                 ride.id
+
 
             ]
 
+
+
         );
+
+
 
 
 
@@ -455,22 +618,33 @@ const addPassengerToPool = async ({
 
 
 
+
+
+
         return {
+
 
 
             poolRide,
 
 
-            updatedRoute:{
 
-                path:
-                bestRoute.route,
+            pool:
+
+            updatedPool,
 
 
-                distance:
-                bestRoute.distance
 
-            }
+            ride:
+
+            updatedRide.rows[0],
+
+
+
+            fare:
+
+            fareResult.fare
+
 
 
         };
@@ -479,9 +653,11 @@ const addPassengerToPool = async ({
 
 
 
+
     }
 
     catch(error){
+
 
 
         await client.query(
@@ -496,6 +672,8 @@ const addPassengerToPool = async ({
 
     }
 
+
+
     finally{
 
 
@@ -505,7 +683,12 @@ const addPassengerToPool = async ({
     }
 
 
+
+
 };
+
+
+
 
 
 
@@ -513,6 +696,8 @@ const addPassengerToPool = async ({
 
 module.exports = {
 
+
     addPassengerToPool
+
 
 };

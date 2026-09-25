@@ -2,19 +2,23 @@ const pool = require("../../database/db");
 
 
 
-// Find active pool and lock it
-// Also get vehicle capacity
+
+// Find active pool and lock row
 
 const findActivePoolWithLock = async (
+
     client,
+
     poolId
-) => {
+
+)=>{
 
 
     const result =
     await client.query(
 
         `
+
         SELECT
 
             pools.*,
@@ -30,18 +34,22 @@ const findActivePoolWithLock = async (
         ON pools.vehicle_id = vehicles.id
 
 
+
         WHERE pools.id=$1
 
 
         AND pools.status='ACTIVE'
 
 
-        FOR UPDATE
+        FOR UPDATE OF pools
+
 
         `,
 
         [
+
             poolId
+
         ]
 
     );
@@ -49,13 +57,18 @@ const findActivePoolWithLock = async (
 
     return result.rows[0];
 
+
 };
 
 
 
 
 
-// Calculate occupied seats in pool
+
+
+
+
+// Calculate occupied seats
 
 const getOccupiedSeats = async (
 
@@ -63,18 +76,22 @@ const getOccupiedSeats = async (
 
     poolId
 
-) => {
+)=>{
 
 
     const result =
     await client.query(
 
         `
+
         SELECT
 
         COALESCE(
+
             SUM(seats_allocated),
+
             0
+
         ) AS occupied
 
 
@@ -83,20 +100,31 @@ const getOccupiedSeats = async (
 
         WHERE pool_id=$1
 
+
         `,
 
+
         [
+
             poolId
+
         ]
 
     );
 
 
     return Number(
+
         result.rows[0].occupied
+
     );
 
+
 };
+
+
+
+
 
 
 
@@ -109,21 +137,27 @@ const addRideToPool = async (
     client,
 
     {
+
         poolId,
+
         rideId,
+
         seatsAllocated
+
     }
 
-) => {
+)=>{
 
 
     const result =
     await client.query(
 
         `
+
         INSERT INTO pool_rides
 
         (
+
             pool_id,
 
             ride_id,
@@ -138,7 +172,9 @@ const addRideToPool = async (
 
         RETURNING *
 
+
         `,
+
 
         [
 
@@ -155,46 +191,61 @@ const addRideToPool = async (
 
     return result.rows[0];
 
+
 };
 
 
 
 
 
-// Update current optimized route
+
+
+
+
+// Update optimized pool route
 
 const updatePoolRoute = async (
 
     client,
 
     {
+
         poolId,
+
         route
+
     }
 
-) => {
+)=>{
 
 
     const result =
     await client.query(
 
         `
+
         UPDATE pools
 
 
         SET
 
-        current_route=$1,
 
-        route_updated_at=CURRENT_TIMESTAMP
+            current_route=$1,
+
+
+            route_updated_at=CURRENT_TIMESTAMP
+
 
 
         WHERE id=$2
 
 
+
         RETURNING *
 
+
         `,
+
 
         [
 
@@ -209,13 +260,79 @@ const updatePoolRoute = async (
 
     return result.rows[0];
 
+
 };
 
 
 
 
 
-module.exports = {
+
+
+
+
+// Update passenger fare
+
+const updateRideFare = async (
+
+    client,
+
+    {
+
+        rideId,
+
+        fare
+
+    }
+
+)=>{
+
+
+    const result =
+    await client.query(
+
+        `
+
+        UPDATE rides
+
+
+        SET fare=$1
+
+
+        WHERE id=$2
+
+
+        RETURNING *
+
+
+        `,
+
+
+        [
+
+            fare,
+
+            rideId
+
+        ]
+
+    );
+
+
+    return result.rows[0];
+
+
+};
+
+
+
+
+
+
+
+
+
+module.exports={
 
 
     findActivePoolWithLock,
@@ -227,6 +344,10 @@ module.exports = {
     addRideToPool,
 
 
-    updatePoolRoute
+    updatePoolRoute,
+
+
+    updateRideFare
+
 
 };

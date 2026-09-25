@@ -1,8 +1,14 @@
 const pool = require("../../database/db");
 
-const getRoadEdges = async () => {
-  const result = await pool.query(
-    `
+
+
+const getRoadEdges = async()=>{
+
+
+    const result =
+    await pool.query(
+
+        `
         SELECT
 
             from_location_id,
@@ -14,12 +20,21 @@ const getRoadEdges = async () => {
 
         FROM road_edges
 
-        `,
-  );
+        `
 
-  return result.rows;
+    );
+
+
+
+    return result.rows;
+
+
 };
 
-module.exports = {
-  getRoadEdges,
+
+
+
+
+module.exports={
+    getRoadEdges
 };

@@ -1,15 +1,26 @@
-const router = require("express").Router();
+const router =
+require("express").Router();
 
-const controller = require("./pooling.controller");
 
-const authMiddleware = require("../../middleware/auth.middleware");
+const controller =
+require("./pooling.controller");
+
+
+const authMiddleware =
+require("../../middleware/auth.middleware");
+
+
 
 router.post(
-  "/:poolId/add-passenger",
 
-  authMiddleware,
+"/:poolId/add-passenger",
 
-  controller.addPassengerToPool,
+authMiddleware,
+
+controller.addPassengerToPool
+
 );
+
+
 
 module.exports = router;
