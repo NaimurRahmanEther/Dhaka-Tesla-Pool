@@ -14,11 +14,8 @@ const createVehicle = async (driverId, data) => {
 
   return vehicleRepository.createVehicle({
     driverId,
-
     model: data.model,
-
     capacity: data.capacity,
-
     currentLocationId: data.currentLocationId,
   });
 };
@@ -59,10 +56,7 @@ const updateStatus = async (driverId, status) => {
 
 module.exports = {
   createVehicle,
-
   getMyVehicle,
-
   updateVehicle,
-
   updateStatus,
 };

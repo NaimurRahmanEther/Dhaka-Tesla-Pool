@@ -2,16 +2,8 @@ const router = require("express").Router();
 
 const controller = require("./location.controller");
 
-router.get(
-  "/",
+router.get("/", controller.getAllLocations);
 
-  controller.getAllLocations,
-);
-
-router.get(
-  "/:id",
-
-  controller.getLocationById,
-);
+router.get("/:id", controller.getLocationById);
 
 module.exports = router;

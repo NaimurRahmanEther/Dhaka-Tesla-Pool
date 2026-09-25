@@ -1,65 +1,17 @@
-const {
-    calculateFare
-}
-=
-require("./fare.utils");
+const { calculateFare } = require("./fare.utils");
 
-
-
-
-
-
-
-const calculateRideFare = async({
-
-
+const calculateRideFare = async ({ distance, isPool }) => {
+  const fare = calculateFare({
     distance,
+    isPool,
+  });
 
-    isPool
-
-
-})=>{
-
-
-
-    const fare =
-    calculateFare({
-
-        distance,
-
-        isPool
-
-    });
-
-
-
-
-
-    return {
-
-
-        distance,
-
-
-        fare
-
-
-    };
-
-
-
+  return {
+    distance,
+    fare,
+  };
 };
 
-
-
-
-
-
-
 module.exports = {
-
-
-    calculateRideFare
-
-
+  calculateRideFare,
 };

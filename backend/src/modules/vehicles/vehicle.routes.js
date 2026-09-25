@@ -10,9 +10,7 @@ const validate = require("../../middleware/validate.middleware");
 
 const {
   createVehicleSchema,
-
   updateVehicleSchema,
-
   updateStatusSchema,
 } = require("./vehicle.validation");
 
@@ -20,13 +18,9 @@ const {
 
 router.post(
   "/",
-
   authMiddleware,
-
   roleMiddleware("DRIVER"),
-
   validate(createVehicleSchema),
-
   controller.createVehicle,
 );
 
@@ -34,11 +28,8 @@ router.post(
 
 router.get(
   "/me",
-
   authMiddleware,
-
   roleMiddleware("DRIVER"),
-
   controller.getMyVehicle,
 );
 
@@ -46,13 +37,9 @@ router.get(
 
 router.patch(
   "/status",
-
   authMiddleware,
-
   roleMiddleware("DRIVER"),
-
   validate(updateStatusSchema),
-
   controller.updateStatus,
 );
 
@@ -60,16 +47,10 @@ router.patch(
 
 router.patch(
   "/:id",
-
   authMiddleware,
-
   roleMiddleware("DRIVER"),
-
   validate(updateVehicleSchema),
-
   controller.updateVehicle,
 );
-
-
 
 module.exports = router;

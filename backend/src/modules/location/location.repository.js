@@ -5,13 +5,10 @@ const pool = require("../../database/db");
 const findAllLocations = async () => {
   const result = await pool.query(
     `
-        SELECT *
-
-        FROM locations
-
-        ORDER BY id ASC
-
-        `,
+      SELECT *
+      FROM locations
+      ORDER BY id ASC
+    `,
   );
 
   return result.rows;
@@ -22,14 +19,10 @@ const findAllLocations = async () => {
 const findLocationById = async (id) => {
   const result = await pool.query(
     `
-        SELECT *
-
-        FROM locations
-
-        WHERE id=$1
-
-        `,
-
+      SELECT *
+      FROM locations
+      WHERE id=$1
+    `,
     [id],
   );
 
@@ -38,6 +31,5 @@ const findLocationById = async (id) => {
 
 module.exports = {
   findAllLocations,
-
   findLocationById,
 };

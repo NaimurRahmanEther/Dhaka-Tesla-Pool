@@ -1,26 +1,9 @@
-const router =
-require("express").Router();
+const router = require("express").Router();
 
+const controller = require("./matching.controller");
 
-const controller =
-require("./matching.controller");
+const authMiddleware = require("../../middleware/auth.middleware");
 
-
-const authMiddleware =
-require("../../middleware/auth.middleware");
-
-
-
-router.post(
-
-"/:rideId",
-
-authMiddleware,
-
-controller.matchRide
-
-);
-
-
+router.post("/:rideId", authMiddleware, controller.matchRide);
 
 module.exports = router;

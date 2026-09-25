@@ -18,6 +18,5 @@ const getLocationById = async (id) => {
 
 module.exports = {
   getAllLocations,
-
   getLocationById,
 };

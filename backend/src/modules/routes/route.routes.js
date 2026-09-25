@@ -4,20 +4,12 @@ const controller = require("./route.controller");
 
 const authMiddleware = require("../../middleware/auth.middleware");
 
-router.post(
-  "/",
+// Generate driver route
 
-  authMiddleware,
+router.post("/", authMiddleware, controller.createRoute);
 
-  controller.createRoute,
-);
+// Get current route
 
-router.get(
-  "/me",
-
-  authMiddleware,
-
-  controller.getMyRoute,
-);
+router.get("/me", authMiddleware, controller.getMyRoute);
 
 module.exports = router;
