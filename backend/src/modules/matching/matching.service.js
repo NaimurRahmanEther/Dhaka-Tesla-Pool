@@ -1,131 +1,602 @@
-const matchingRepository = require("./matching.repository");
+const matchingRepository =
+require("./matching.repository");
+
 
 const {
-  isSeatAvailable,
-  isRouteCompatible,
-  calculateMatchScore,
-} = require("./matching.algorithm");
+    isSeatAvailable,
+    isDetourAcceptable,
+    calculateMatchScore,
 
-const routeRepository = require("../routes/routes.repository");
+} =
+require("./matching.algorithm");
 
-const AppError = require("../../utils/AppError");
+
+const graphService =
+require("../graph/graph.service");
+
+
+const fareService =
+require("../fare/fare.service");
+
+
+const AppError =
+require("../../utils/AppError");
+
+
+
+
+
+
+
 
 const matchRide = async (ride) => {
-  const vehicles = await matchingRepository.findAvailableVehicles();
 
-  if (!vehicles.length) {
-    throw new AppError("No available vehicle found", 404);
-  }
 
-  let bestMatch = null;
 
-  for (const vehicle of vehicles) {
-    const activePool = await matchingRepository.findActivePoolByVehicleId(
-      vehicle.vehicle_id,
-    );
+    const vehicles =
+    await matchingRepository.findAvailableVehicles();
 
-    let occupiedSeats = 0;
 
-    if (activePool) {
-      const poolRides = await matchingRepository.getPoolRides(activePool.id);
 
-      occupiedSeats = poolRides.reduce(
-        (total, item) => total + item.seats_allocated,
 
-        0,
-      );
+
+    if(!vehicles.length){
+
+
+        throw new AppError(
+
+            "No available vehicle found",
+
+            404
+
+        );
+
     }
 
-    const seatAvailable = isSeatAvailable(
-      vehicle.capacity,
 
-      occupiedSeats,
 
-      ride.seats_requested,
-    );
 
-    if (!seatAvailable) {
-      continue;
-    }
 
-    /*
-            Get driver's planned route
+
+
+    let bestMatch = null;
+
+
+
+
+
+
+
+    for(const vehicle of vehicles){
+
+
+
+
+
+        const activePool =
+
+        await matchingRepository.findActivePoolByVehicleId(
+
+            vehicle.vehicle_id
+
+        );
+
+
+
+
+
+
+
+        let occupiedSeats = 0;
+
+        let currentRoute = null;
+
+
+
+
+
+
+
+        if(activePool){
+
+
+
+            const poolRides =
+
+            await matchingRepository.getPoolRides(
+
+                activePool.id
+
+            );
+
+
+
+
+
+            occupiedSeats =
+
+            poolRides.reduce(
+
+                (total,item)=>
+
+                total + item.seats_allocated,
+
+                0
+
+            );
+
+
+
+
+
+            currentRoute =
+
+            activePool.current_route;
+
+
+
+        }
+
+
+
+
+
+
+
+
+
+        /*
+            Check seat availability
+        */
+
+
+        const seatAvailable =
+
+        isSeatAvailable(
+
+            vehicle.capacity,
+
+            occupiedSeats,
+
+            ride.seats_requested
+
+        );
+
+
+
+
+
+        if(!seatAvailable){
+
+            continue;
+
+        }
+
+
+
+
+
+
+
+
+
+        let calculatedRoute;
+
+
+
+
+
+
+
+
+        /*
+            New Tesla
+
+            Driver current location
+            -> pickup
+            -> destination
 
         */
 
-    const driverRoute = await routeRepository.findRouteByDriverId(
-      vehicle.driver_id,
-    );
 
-    if (!driverRoute) {
-      continue;
+        if(!activePool){
+
+
+
+            calculatedRoute =
+
+            await graphService.calculateDriverRoute({
+
+
+                currentLocationId:
+
+                vehicle.current_location_id,
+
+
+
+                pickupLocationId:
+
+                ride.pickup_location_id,
+
+
+
+                destinationLocationId:
+
+                ride.destination_location_id
+
+
+
+            });
+
+
+
+        }
+
+
+
+
+
+        /*
+            Existing pool
+
+            Pooling module will optimize
+
+        */
+
+
+        else{
+
+
+            calculatedRoute =
+
+            currentRoute;
+
+
+        }
+
+
+
+
+
+
+
+
+
+        if(!calculatedRoute){
+
+            continue;
+
+        }
+
+
+
+
+
+
+
+
+
+        /*
+            Check detour
+
+        */
+
+
+        if(currentRoute){
+
+
+
+            const allowed =
+
+            isDetourAcceptable(
+
+
+                currentRoute.distance,
+
+
+                calculatedRoute.distance
+
+
+            );
+
+
+
+
+
+            if(!allowed){
+
+                continue;
+
+            }
+
+
+        }
+
+
+
+
+
+
+
+
+
+        const score =
+
+        calculateMatchScore({
+
+
+
+            extraDistance:
+
+
+            currentRoute
+
+            ?
+
+            calculatedRoute.distance -
+
+            currentRoute.distance
+
+
+            :
+
+            0,
+
+
+
+
+            availableSeats:
+
+
+            vehicle.capacity -
+
+            occupiedSeats
+
+
+
+        });
+
+
+
+
+
+
+
+
+
+        if(
+
+            !bestMatch ||
+
+            score > bestMatch.score
+
+        ){
+
+
+
+            bestMatch = {
+
+
+                vehicle,
+
+
+                activePool,
+
+
+                occupiedSeats,
+
+
+                route: calculatedRoute,
+
+
+                score
+
+
+
+            };
+
+
+
+        }
+
+
+
+
+
     }
 
-    const compatible = isRouteCompatible(
-      driverRoute.route.path,
 
-      ride.pickup_location_id,
 
-      ride.destination_location_id,
-    );
 
-    if (!compatible) {
-      continue;
+
+
+
+
+
+    if(!bestMatch){
+
+
+        throw new AppError(
+
+            "No compatible driver found",
+
+            404
+
+        );
+
     }
 
-    const score = calculateMatchScore({
-      extraDistance: 0,
 
-      availableSeats: vehicle.capacity - occupiedSeats,
-    });
 
-    if (!bestMatch || score > bestMatch.score) {
-      bestMatch = {
-        vehicle,
 
-        activePool,
 
-        occupiedSeats,
 
-        score,
-      };
-    }
-  }
 
-  if (!bestMatch) {
-    throw new AppError(
-      "No compatible driver found",
 
-      404,
-    );
-  }
 
-  /*
-        Now assign ride
+    /*
+        Calculate fare
 
-        Transaction happens inside repository
+        First passenger
+        no pool discount
 
     */
 
-  const assignment = await matchingRepository.assignRideToPool({
-    vehicleId: bestMatch.vehicle.vehicle_id,
 
-    driverId: bestMatch.vehicle.driver_id,
+    const fareResult =
 
-    rideId: ride.id,
+    await fareService.calculateRideFare({
 
-    seatsAllocated: ride.seats_requested,
-  });
 
-  return {
-    assignment,
 
-    driver: bestMatch.vehicle.driver_name,
+        distance:
 
-    vehicleId: bestMatch.vehicle.vehicle_id,
-  };
+        bestMatch.route.distance,
+
+
+
+        isPool:false
+
+
+
+    });
+
+
+
+
+
+
+
+
+
+    /*
+        Save fare
+
+    */
+
+
+    await matchingRepository.updateRideFare(
+
+
+        ride.id,
+
+
+        fareResult.fare
+
+
+    );
+
+
+
+
+
+
+
+
+
+    /*
+        Assign ride
+
+    */
+
+
+    const assignment =
+
+    await matchingRepository.assignRideToPool({
+
+
+
+        vehicleId:
+
+        bestMatch.vehicle.vehicle_id,
+
+
+
+        driverId:
+
+        bestMatch.vehicle.driver_id,
+
+
+
+        rideId:
+
+        ride.id,
+
+
+
+        seatsAllocated:
+
+        ride.seats_requested,
+
+
+
+        route:
+
+        bestMatch.route
+
+
+
+    });
+
+
+
+
+
+
+
+
+
+    return {
+
+
+
+        assignment,
+
+
+
+        driver:
+
+        bestMatch.vehicle.driver_name,
+
+
+
+        vehicleId:
+
+        bestMatch.vehicle.vehicle_id,
+
+
+
+        route:
+
+        bestMatch.route,
+
+
+
+        fare:
+
+        fareResult.fare
+
+
+
+    };
+
+
+
+
+
 };
 
+
+
+
+
+
+
+
 module.exports = {
-  matchRide,
+
+
+    matchRide
+
+
 };

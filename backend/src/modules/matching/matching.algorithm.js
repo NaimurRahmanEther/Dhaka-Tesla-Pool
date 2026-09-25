@@ -1,49 +1,155 @@
-const calculateAvailableSeats = (capacity, occupiedSeats) => {
-  return capacity - occupiedSeats;
-};
+const MAX_DETOUR_DISTANCE = 5; // km
 
-const isSeatAvailable = (capacity, occupiedSeats, requestedSeats) => {
-  const availableSeats = calculateAvailableSeats(capacity, occupiedSeats);
 
-  return availableSeats >= requestedSeats;
-};
 
-const isRouteCompatible = (
-  driverRoute,
-  pickupLocation,
-  destinationLocation,
+
+
+// Calculate available seats
+
+const calculateAvailableSeats = (
+    capacity,
+    occupiedSeats
 ) => {
-  const pickupIndex = driverRoute.indexOf(pickupLocation);
 
-  const destinationIndex = driverRoute.indexOf(destinationLocation);
+    return capacity - occupiedSeats;
 
-  if (pickupIndex === -1 || destinationIndex === -1) {
-    return false;
-  }
-
-  return pickupIndex < destinationIndex;
 };
 
-const calculateMatchScore = ({ extraDistance, availableSeats }) => {
-  let score = 100;
 
-  // Penalize extra detour
 
-  score -= extraDistance * 5;
 
-  // Prefer more available seats
 
-  score += availableSeats * 2;
 
-  return score;
+
+// Check seat availability
+
+const isSeatAvailable = (
+    capacity,
+    occupiedSeats,
+    requestedSeats
+) => {
+
+
+    const availableSeats =
+    calculateAvailableSeats(
+        capacity,
+        occupiedSeats
+    );
+
+
+    return availableSeats >= requestedSeats;
+
 };
+
+
+
+
+
+
+
+
+// Calculate extra distance after adding passenger
+
+const calculateDetour = (
+    oldDistance,
+    newDistance
+) => {
+
+
+    return Math.max(
+        0,
+        newDistance - oldDistance
+    );
+
+};
+
+
+
+
+
+
+
+
+// Check whether passenger can join pool
+
+const isDetourAcceptable = (
+    oldDistance,
+    newDistance
+) => {
+
+
+    const detour =
+    calculateDetour(
+        oldDistance,
+        newDistance
+    );
+
+
+    return detour <= MAX_DETOUR_DISTANCE;
+
+};
+
+
+
+
+
+
+
+
+
+// Calculate matching score
+
+const calculateMatchScore = ({
+    extraDistance,
+    availableSeats
+}) => {
+
+
+    let score = 100;
+
+
+
+
+    // Penalize additional travel
+
+    score -= extraDistance * 5;
+
+
+
+
+    // Prefer vehicles with more free seats
+
+    score += availableSeats * 2;
+
+
+
+    return score;
+
+};
+
+
+
+
+
+
+
 
 module.exports = {
-  calculateAvailableSeats,
 
-  isSeatAvailable,
 
-  isRouteCompatible,
+    calculateAvailableSeats,
 
-  calculateMatchScore,
+
+    isSeatAvailable,
+
+
+    calculateDetour,
+
+
+    isDetourAcceptable,
+
+
+    calculateMatchScore
+
+
 };

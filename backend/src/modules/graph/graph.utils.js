@@ -1,23 +1,31 @@
 const buildGraph = (edges)=>{
 
 
-    const graph = {};
+    const graph={};
+
 
 
 
     for(const edge of edges){
 
 
+
         const from =
-        edge.from_location_id;
+        Number(edge.from_location_id);
+
 
 
         const to =
-        edge.to_location_id;
+        Number(edge.to_location_id);
+
 
 
         const distance =
-        edge.distance;
+        Number(edge.distance_km);
+
+
+
+
 
 
 
@@ -37,7 +45,11 @@ const buildGraph = (edges)=>{
 
 
 
-        // forward direction
+
+
+
+
+        // Forward
 
         graph[from].push({
 
@@ -49,7 +61,11 @@ const buildGraph = (edges)=>{
 
 
 
-        // reverse direction
+
+
+
+
+        // Reverse
 
         graph[to].push({
 
@@ -60,18 +76,22 @@ const buildGraph = (edges)=>{
         });
 
 
+
     }
+
+
 
 
 
     return graph;
 
+
 };
 
 
 
-module.exports = {
 
+
+module.exports={
     buildGraph
-
 };

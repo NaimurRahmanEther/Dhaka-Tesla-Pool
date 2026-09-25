@@ -1,5 +1,4 @@
-const {z}=require("zod");
-
+const { z } = require("zod");
 
 
 const createVehicleSchema = z.object({
@@ -13,6 +12,12 @@ const createVehicleSchema = z.object({
 
 
     capacity:
+    z.number()
+    .int()
+    .positive(),
+
+
+    currentLocationId:
     z.number()
     .int()
     .positive()
@@ -32,6 +37,13 @@ const updateVehicleSchema = z.object({
 
 
     capacity:
+    z.number()
+    .int()
+    .positive()
+    .optional(),
+
+
+    currentLocationId:
     z.number()
     .int()
     .positive()
@@ -55,9 +67,7 @@ const updateStatusSchema = z.object({
 
 
 
-
-
-module.exports={
+module.exports = {
 
     createVehicleSchema,
 

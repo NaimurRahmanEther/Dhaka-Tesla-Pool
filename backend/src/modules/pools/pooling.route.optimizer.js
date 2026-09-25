@@ -1,44 +1,18 @@
-const graphService =
-require("../graph/graph.service");
+const graphService = require("../graph/graph.service");
+
+
+const MAX_DETOUR_DISTANCE = 5;
 
 
 
+// Calculate detour
 
-// Calculate total route distance
+const calculateDetour = (
+    oldDistance,
+    newDistance
+)=>{
 
-const calculateRouteDistance = async(route)=>{
-
-
-    let distance = 0;
-
-
-    for(
-        let i = 0;
-        i < route.length - 1;
-        i++
-    ){
-
-        const from =
-        route[i];
-
-
-        const to =
-        route[i+1];
-
-
-        const result =
-        await graphService.shortestPath(
-            from,
-            to
-        );
-
-
-        distance += result.distance;
-
-    }
-
-
-    return distance;
+    return newDistance - oldDistance;
 
 };
 
@@ -46,62 +20,74 @@ const calculateRouteDistance = async(route)=>{
 
 
 
-// Generate possible insertion routes
+// Check detour limit
+
+const isDetourAcceptable = (
+    oldDistance,
+    newDistance
+)=>{
+
+    const detour =
+    calculateDetour(
+        oldDistance,
+        newDistance
+    );
+
+
+    return detour <= MAX_DETOUR_DISTANCE;
+
+};
+
+
+
+
+
+
+
+// Generate possible routes
 
 const generateInsertionRoutes = (
-
     currentRoute,
-
     pickup,
-
     destination
-
 )=>{
 
 
-    const routes = [];
+    const routes=[];
 
 
 
     for(
-        let i = 0;
-        i < currentRoute.length;
+        let i=0;
+        i<=currentRoute.length;
         i++
     ){
 
 
         for(
             let j=i+1;
-            j<=currentRoute.length;
+            j<=currentRoute.length+1;
             j++
         ){
 
 
-            const newRoute =
-            [
+            const route=[
 
-                ...currentRoute.slice(
-                    0,
-                    i
-                ),
-
+                ...currentRoute.slice(0,i),
 
                 pickup,
 
+                ...currentRoute.slice(i,j),
 
                 destination,
 
-
-                ...currentRoute.slice(
-                    i
-                )
+                ...currentRoute.slice(j)
 
             ];
 
 
 
-            routes.push(newRoute);
-
+            routes.push(route);
 
         }
 
@@ -117,7 +103,63 @@ const generateInsertionRoutes = (
 
 
 
-// Find best route after adding passenger
+
+
+
+
+// Calculate complete route distance
+
+const calculateRouteDistance = async(route)=>{
+
+
+    let distance=0;
+
+
+
+    for(
+        let i=0;
+        i<route.length-1;
+        i++
+    ){
+
+
+        const result =
+        await graphService.shortestPath(
+
+            route[i],
+
+            route[i+1]
+
+        );
+
+
+        if(!result){
+
+            return Infinity;
+
+        }
+
+
+        distance += result.distance;
+
+
+    }
+
+
+
+    return distance;
+
+};
+
+
+
+
+
+
+
+
+
+// Find optimized route
 
 const findBestRoute = async({
 
@@ -143,10 +185,11 @@ const findBestRoute = async({
 
 
 
-    let bestRoute = null;
+    let bestRoute=null;
 
-    let minimumDistance =
-    Infinity;
+    let minimumDistance=Infinity;
+
+
 
 
 
@@ -168,14 +211,23 @@ const findBestRoute = async({
         ){
 
 
-            minimumDistance =
-            distance;
+            minimumDistance=distance;
 
+            bestRoute=route;
 
-            bestRoute =
-            route;
 
         }
+
+
+    }
+
+
+
+
+
+    if(!bestRoute){
+
+        return null;
 
     }
 
@@ -183,9 +235,12 @@ const findBestRoute = async({
 
     return {
 
+
         route:bestRoute,
 
+
         distance:minimumDistance
+
 
     };
 
@@ -194,11 +249,22 @@ const findBestRoute = async({
 
 
 
+
+
 module.exports={
+
+
+    calculateDetour,
+
+
+    isDetourAcceptable,
+
+
+    generateInsertionRoutes,
+
 
     calculateRouteDistance,
 
-    generateInsertionRoutes,
 
     findBestRoute
 
