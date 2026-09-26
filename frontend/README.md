@@ -34,8 +34,7 @@ an interview.
 ## Setup
 
 ```bash
-cd frontend
-npm install
+cd frontend; npm install
 cp .env.example .env.local    # only needed if the backend is not on :8000
 npm run dev
 ```
