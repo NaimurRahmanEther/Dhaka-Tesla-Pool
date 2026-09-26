@@ -9,6 +9,7 @@ import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import DriverHome from '@/pages/driver/DriverHome'
 import PassengerHome from '@/pages/passenger/PassengerHome'
+import RequestRidePage from '@/pages/passenger/RequestRidePage'
 import ProtectedRoute from '@/routes/ProtectedRoute'
 import PublicOnlyRoute from '@/routes/PublicOnlyRoute'
 import RoleRoute from '@/routes/RoleRoute'
@@ -24,9 +25,10 @@ import RoleRoute from '@/routes/RoleRoute'
 //   RoleRoute        blocks the wrong role (Phase 5)
 //   ProtectedRoute   requires a signed-in user (Phase 5)
 //
-// The dashboard cards and the navbar link to feature pages (request, my rides,
-// payments, history, tesla, requests, active trip) that 404 until their phases
-// land - accepted in-progress state, consistent with earlier phases.
+// The dashboard cards and the navbar link to feature pages (my rides, payments,
+// history, tesla, requests, active trip) that 404 until their phases land -
+// accepted in-progress state, consistent with earlier phases. /request is live
+// since Phase 7.
 export default function AppRoutes() {
   return (
     <Routes>
@@ -45,6 +47,18 @@ export default function AppRoutes() {
           <PublicOnlyRoute>
             <RegisterPage />
           </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/request"
+        element={
+          <ProtectedRoute>
+            <RoleRoute role={ROLES.PASSENGER}>
+              <AppShell>
+                <RequestRidePage />
+              </AppShell>
+            </RoleRoute>
+          </ProtectedRoute>
         }
       />
       <Route
