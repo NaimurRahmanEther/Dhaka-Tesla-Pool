@@ -15,7 +15,7 @@ rest are told how many seats were left.
 | Path | What it is |
 | --- | --- |
 | `backend/` | Express + PostgreSQL API |
-| `frontend/` | Not built yet |
+| `frontend/` | React + Vite single-page app, talks to the API over CORS |
 
 ## Running it
 
@@ -55,6 +55,28 @@ first request.
 | `npm run migrate` | Apply pending migrations |
 | `npm run migrate:down` | Roll the last migration back |
 | `npm run seed` | Load the locations and roads |
+
+### Frontend
+
+The React app lives in `frontend/`. Its README (`frontend/README.md`) covers the
+stack, the folder structure and the data-loading pattern in detail; this section
+is just enough to run it.
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173
+```
+
+The frontend reads the API base URL from `VITE_API_URL`, which defaults to
+`http://localhost:8000`. The backend's CORS allow-list only includes
+`http://localhost:5173`, so the dev server is pinned there — it fails loudly on a
+busy port instead of sliding to 5174 and breaking every request on CORS.
+
+The frontend follows the same no-hardcoded-data rule as the API contract:
+every figure on screen comes from a backend endpoint, and the fare in particular
+is never recomputed in the browser — the server writes `fare_breakdown` on the
+ride and the UI renders those line items.
 
 ## Accounts
 
