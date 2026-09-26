@@ -25,6 +25,14 @@ router.get(
   controller.getMyRides,
 );
 
+// Lifecycle trail for one ride. Deliberately not role-locked: the service
+// allows the owning passenger and the serving driver, and rejects anyone else.
+router.get(
+  "/:id/history",
+  authMiddleware,
+  controller.getRideTimeline,
+);
+
 router.patch(
   "/:id/cancel",
   authMiddleware,

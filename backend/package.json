@@ -10,6 +10,9 @@
     "migrate:down": "node src/database/migrate.js down",
     "seed": "node src/database/seeds/runSeeds.js"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",

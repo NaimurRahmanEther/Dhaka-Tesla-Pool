@@ -10,7 +10,9 @@ CREATE TABLE pools (
     vehicle_id INTEGER NOT NULL,
     driver_id INTEGER NOT NULL,
     status pool_status DEFAULT 'CREATED',
-    capacity INTEGER,
+    -- A snapshot of the Tesla's capacity taken when the pool opened. Every
+    -- pool is created from a real vehicle, so this is never unknown.
+    capacity INTEGER NOT NULL CHECK (capacity > 0),
     current_route JSONB,
     route_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

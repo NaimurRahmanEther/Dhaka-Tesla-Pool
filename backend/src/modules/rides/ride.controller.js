@@ -19,8 +19,21 @@ const cancelRide = asyncHandler(async (req, res) => {
   return successResponse(res, 200, "Ride cancelled successfully", ride);
 });
 
+// Full lifecycle trail for one ride. Open to both roles; the service checks
+// that the caller is either the passenger or the driver serving it.
+const getRideTimeline = asyncHandler(async (req, res) => {
+  const timeline = await rideService.getRideTimeline(
+    Number(req.params.id),
+    req.user.id,
+    req.user.role,
+  );
+
+  return successResponse(res, 200, "Ride timeline fetched successfully", timeline);
+});
+
 module.exports = {
   createRide,
   getMyRides,
   cancelRide,
+  getRideTimeline,
 };

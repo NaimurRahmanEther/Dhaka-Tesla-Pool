@@ -1,29 +1,13 @@
 const historyRepository = require("./history.repository");
 
-const AppError = require("../../utils/AppError");
-
-// Passenger history
-
+// An empty history is a normal state for a new account, so it returns an empty
+// list rather than a 404. The frontend can then render "no rides yet".
 const getPassengerHistory = async (passengerId) => {
-  const rides = await historyRepository.findPassengerHistory(passengerId);
-
-  if (!rides.length) {
-    throw new AppError("No ride history found", 404);
-  }
-
-  return rides;
+  return historyRepository.findPassengerHistory(passengerId);
 };
 
-// Driver history
-
 const getDriverHistory = async (driverId) => {
-  const trips = await historyRepository.findDriverHistory(driverId);
-
-  if (!trips.length) {
-    throw new AppError("No trip history found", 404);
-  }
-
-  return trips;
+  return historyRepository.findDriverHistory(driverId);
 };
 
 module.exports = {

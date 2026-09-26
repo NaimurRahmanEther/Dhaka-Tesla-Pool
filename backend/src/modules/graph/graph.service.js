@@ -4,18 +4,12 @@ const { buildGraph } = require("./graph.utils");
 
 const { findShortestPath } = require("./dijkstra");
 
-const getRoadGraph = async () => {
+// road_edges is small, so the graph is rebuilt from the database on every
+// lookup. No cache, so an edge edit takes effect on the next request.
+const shortestPath = async (start, destination) => {
   const edges = await graphRepository.getRoadEdges();
 
-  const graph = buildGraph(edges);
-
-  return graph;
-};
-
-const shortestPath = async (start, destination) => {
-  const graph = await getRoadGraph();
-
-  return findShortestPath(graph, start, destination);
+  return findShortestPath(buildGraph(edges), start, destination);
 };
 
 // Driver current location -> Pickup -> Destination
@@ -63,7 +57,6 @@ const calculateRouteDistance = async (route) => {
 };
 
 module.exports = {
-  getRoadGraph,
   shortestPath,
   calculateDriverRoute,
   calculateRouteDistance,

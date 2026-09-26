@@ -24,6 +24,8 @@ const createUser = async ({ name, email, password, role }) => {
   return result.rows[0];
 };
 
+// Case-insensitive on purpose, so `Jashim@x.com` cannot slip past the
+// "Email already exists" check and fail on the unique index as a 500.
 const findUserByEmail = async (email) => {
   const result = await pool.query(
     `
@@ -35,7 +37,7 @@ const findUserByEmail = async (email) => {
           role,
           created_at
       FROM users
-      WHERE email=$1
+      WHERE LOWER(email)=LOWER($1)
     `,
     [email],
   );

@@ -19,8 +19,19 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
   if (blacklisted) {
     throw new AppError("Token has been revoked", 401);
   }
-  // Verify access token
-  const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET);
+  // Verify access token. jsonwebtoken errors carry no statusCode, so without
+  // this they would surface as a 500 instead of a 401.
+  let decoded;
+  try {
+    decoded = jwt.verify(token, env.JWT_ACCESS_SECRET);
+  } catch (error) {
+    const message =
+      error.name === "TokenExpiredError"
+        ? "Access token expired"
+        : "Invalid access token";
+
+    throw new AppError(message, 401);
+  }
   // Attach authenticated user
   req.user = decoded;
   next();

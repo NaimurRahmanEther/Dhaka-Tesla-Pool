@@ -4,6 +4,29 @@ const pool = require("../../database/db");
 
 const AppError = require("../../utils/AppError");
 
+// Check out a pool for a driver-side action. Ownership and state are answered
+// separately, so a completed own pool is a 409 and not a 403.
+const lockOwnedActivePool = async (client, poolId, driverId) => {
+  const found = await tripRepository.findPoolWithLock(client, poolId);
+
+  if (!found) {
+    throw new AppError("Pool not found", 404);
+  }
+
+  if (found.driver_id !== driverId) {
+    throw new AppError("You cannot operate on this pool", 403);
+  }
+
+  if (found.status !== "ACTIVE") {
+    throw new AppError(
+      `This trip is already ${found.status.toLowerCase()}, it cannot be changed`,
+      409,
+    );
+  }
+
+  return found;
+};
+
 // Driver view active trip
 
 const getActiveTrip = async (driverId) => {
@@ -24,22 +47,17 @@ const arriveTrip = async (poolId, driverId) => {
   try {
     await client.query("BEGIN");
 
-    // Check driver owns this pool
-
-    const activePool = await tripRepository.findPoolByDriverWithLock(
-      client,
-      poolId,
-      driverId,
-    );
-
-    if (!activePool) {
-      throw new AppError("Pool not found or unauthorized", 403);
-    }
+    await lockOwnedActivePool(client, poolId, driverId);
 
     const rides = await tripRepository.arriveTrip(client, poolId);
 
     if (!rides.length) {
-      throw new AppError("No matched rides found", 404);
+      // The rides are not in a state that can arrive yet, so this is a state
+      // conflict and must not be reported as 404.
+      throw new AppError(
+        "No matched rides to arrive, rides must be MATCHED first",
+        409,
+      );
     }
 
     for (const ride of rides) {
@@ -70,22 +88,17 @@ const startTrip = async (poolId, driverId) => {
   try {
     await client.query("BEGIN");
 
-    // Check driver owns pool
-
-    const activePool = await tripRepository.findPoolByDriverWithLock(
-      client,
-      poolId,
-      driverId,
-    );
-
-    if (!activePool) {
-      throw new AppError("Pool not found or unauthorized", 403);
-    }
+    await lockOwnedActivePool(client, poolId, driverId);
 
     const rides = await tripRepository.startTrip(client, poolId);
 
     if (!rides.length) {
-      throw new AppError("No arrived rides found", 404);
+      // Starting before arriving skips a lifecycle stage. Reported as a
+      // conflict so the driver is told which step is missing.
+      throw new AppError(
+        "Trip cannot start yet, the driver must arrive first",
+        409,
+      );
     }
 
     for (const ride of rides) {
@@ -116,22 +129,17 @@ const completeTrip = async (poolId, driverId) => {
   try {
     await client.query("BEGIN");
 
-    // Check driver owns pool
-
-    const activePool = await tripRepository.findPoolByDriverWithLock(
-      client,
-      poolId,
-      driverId,
-    );
-
-    if (!activePool) {
-      throw new AppError("Pool not found or unauthorized", 403);
-    }
+    await lockOwnedActivePool(client, poolId, driverId);
 
     const rides = await tripRepository.completeTrip(client, poolId);
 
     if (!rides.length) {
-      throw new AppError("No ongoing rides found", 404);
+      // Only completes a pool that is under way, and also catches a second
+      // completion, since the rides have left ONGOING.
+      throw new AppError(
+        "Trip cannot complete, it has not started or is already completed",
+        409,
+      );
     }
 
     for (const ride of rides) {

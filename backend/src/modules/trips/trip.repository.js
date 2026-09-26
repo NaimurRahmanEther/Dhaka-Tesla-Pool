@@ -42,17 +42,17 @@ const findActivePoolByDriverId = async (driverId) => {
 
 // Check driver owns pool and lock it
 
-const findPoolByDriverWithLock = async (client, poolId, driverId) => {
+// Deliberately does not filter on status. Doing both at once reported a
+// driver's own completed pool as "not found or unauthorized".
+const findPoolWithLock = async (client, poolId) => {
   const result = await client.query(
     `
       SELECT *
       FROM pools
       WHERE id=$1
-      AND driver_id=$2
-      AND status='ACTIVE'
       FOR UPDATE
     `,
-    [poolId, driverId],
+    [poolId],
   );
 
   return result.rows[0];
@@ -64,7 +64,9 @@ const arriveTrip = async (client, poolId) => {
   const result = await client.query(
     `
       UPDATE rides
-      SET status='DRIVER_ARRIVED'
+      SET
+          status='DRIVER_ARRIVED',
+          arrived_at=CURRENT_TIMESTAMP
       WHERE id IN
       (
           SELECT ride_id
@@ -86,7 +88,9 @@ const startTrip = async (client, poolId) => {
   const result = await client.query(
     `
       UPDATE rides
-      SET status='ONGOING'
+      SET
+          status='ONGOING',
+          started_at=CURRENT_TIMESTAMP
       WHERE id IN
       (
           SELECT ride_id
@@ -134,6 +138,7 @@ const completePool = async (client, poolId) => {
       UPDATE pools
       SET
           status='COMPLETED',
+          started_at=COALESCE(started_at, CURRENT_TIMESTAMP),
           completed_at=CURRENT_TIMESTAMP
       WHERE id=$1
       RETURNING *
@@ -166,7 +171,7 @@ const createRideHistory = async (client, { rideId, actorId, action }) => {
 
 module.exports = {
   findActivePoolByDriverId,
-  findPoolByDriverWithLock,
+  findPoolWithLock,
   arriveTrip,
   startTrip,
   completeTrip,
