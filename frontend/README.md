@@ -73,7 +73,7 @@ gitignored; only `.env.example` is committed.
 src/
 ├── main.jsx           entry point. Wraps the app in its providers
 ├── App.jsx            renders the route table and nothing else
-├── index.css          the Tailwind import
+├── index.css          Tailwind theme, shared controls, reduced-motion rules
 │
 ├── api/
 │   └── client.js      the only file in the app that calls fetch()
@@ -101,7 +101,7 @@ src/
 ├── components/
 │   ├── ui/            Button, Input, Select, Card, Badge, Spinner,
 │   │                  Alert, EmptyState, PageHeader
-│   └── layout/        Navbar, PageContainer
+│   └── layout/        sidebar/mobile navigation, auth layout, dashboards, brand
 │
 └── pages/
     ├── auth/          RegisterPage, LoginPage
@@ -148,6 +148,28 @@ frontend has to know those to render a status badge and to send the right role
 back to the API. They are a contract with the backend, not data.
 
 ## How the interface behaves
+
+### Visual design and navigation
+
+The Tailwind v4 theme in `src/index.css` defines the ivory canvas, deep green
+brand colours, lime accents, and shared button and input styles. The local UI
+kit keeps forms, feedback, cards, and status labels consistent across both roles.
+Icons and the decorative route illustration are local SVG components; the
+illustration does not represent live location tracking.
+
+Signed-in pages share a desktop sidebar and collapsible mobile navigation.
+Navigation includes the profile and every role-specific feature, including
+joining a pool. History uses tables on desktop and labelled cards on phones.
+Rides, requests, and history have search/filter controls. Cancellation, payment,
+and trip completion ask for confirmation before submitting.
+
+The request board, active trip, and passenger ride detail quietly refresh while
+visible, with polling paused during mutations. Manual refresh remains available.
+Forms have explicit labels, keyboard focus indicators, validation, disabled
+submission states, and password visibility controls. Reduced motion follows
+the browser preference.
+
+### Feedback and actions
 
 A few rules the whole app follows, so the behaviour is consistent rather than
 rediscovered page by page.
@@ -223,20 +245,20 @@ monitoring dashboard.
 Access tokens last 15 minutes. When a request comes back `401`, `client.js` calls
 `POST /auth/refresh-token` once, stores the new access token, and replays the
 original request once. If that also fails it clears the session and the route
-guards redirect to the login page. One retry, no queue, no state machine — without
-it the app would break partway through a demo.
+guards redirect to the login page. Concurrent requests share one in-flight
+refresh. Auth endpoints are excluded from retry so failed credentials and an
+expired refresh cookie do not cause refresh loops.
 
 ## Authentication
 
 The session lives in `src/context/AuthProvider.jsx`, read anywhere in the tree
 with `useAuth()` from `src/hooks/useAuth.js`.
 
-- The **access token** sits in `localStorage`. The **refresh token** is an
-  httpOnly cookie set by the backend, which the app never sees.
-- On every change of the token — first load, login, logout — `AuthProvider`
-  calls `GET /users/me` to learn who the token belongs to. The `user` object in
-  context is therefore always the server's answer, never something stored
-  client-side and trusted on faith.
+- The **access token** stays in memory. The **refresh token** is an httpOnly
+  cookie set by the backend, which the app never sees.
+- On first load, `AuthProvider` restores an access token through the refresh
+  endpoint, then reads `GET /users/me`. Login also loads the profile before
+  redirecting. Profile edits refresh that same context so navigation updates.
 - While that first check is running, `checking` is `true`; route guards wait on
   it so a hard page refresh does not flash a logged-out screen to a logged-in
   user.

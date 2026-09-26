@@ -59,8 +59,8 @@ export default function useApi(fetcher, deps = []) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version, ...deps])
 
-  const reload = () => {
-    setLoading(true)
+  const reload = ({ background = false } = {}) => {
+    if (!background) setLoading(true)
     setError(null)
     setVersion((current) => current + 1)
   }

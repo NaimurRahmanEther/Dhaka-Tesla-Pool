@@ -1,77 +1,78 @@
 import { useEffect, useState } from 'react'
-
 import { AuthContext } from '@/context/auth.context'
 import authService from '@/services/auth.service'
 import userService from '@/services/user.service'
+import { setAccessTokenExported } from '@/api/client'
 
-// Holds the signed-in user and the auth actions, and restores the session from
-// the server on load.
-//
-// The access token lives in localStorage; the refresh token is an httpOnly
-// cookie this app never sees. On every change of the token - first load, login,
-// logout - this provider asks GET /users/me who the token belongs to, so the
-// user object always comes from the server rather than from anything stored
-// client-side.
+// Access tokens remain in memory. Only the httpOnly refresh cookie restores a session.
 export default function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem('accessToken'))
+  const [token, setToken] = useState(null)
   const [user, setUser] = useState(null)
   const [checking, setChecking] = useState(true)
 
   useEffect(() => {
     let active = true
-
+    const clear = () => {
+      setAccessTokenExported(null)
+      setToken(null)
+      setUser(null)
+    }
+    window.addEventListener('auth:expired', clear)
     async function restore() {
-      if (!token) {
-        setUser(null)
-        setChecking(false)
-        return
-      }
-
       try {
+        const { accessToken } = await authService.refreshToken()
+        if (!active) return
+        setAccessTokenExported(accessToken)
         const me = await userService.getMe()
-        if (active) setUser(me)
-      } catch {
-        // The token is bad beyond repair (refresh failed too). Clear it.
-        localStorage.removeItem('accessToken')
         if (active) {
-          setToken(null)
-          setUser(null)
+          setToken(accessToken)
+          setUser(me)
         }
+      } catch {
+        if (active) clear()
       } finally {
         if (active) setChecking(false)
       }
     }
-
     restore()
-
     return () => {
       active = false
+      window.removeEventListener('auth:expired', clear)
     }
-  }, [token])
+  }, [])
 
   async function login(email, password) {
     const { accessToken } = await authService.login(email, password)
-    localStorage.setItem('accessToken', accessToken)
-    setToken(accessToken) // the effect above now fetches /users/me
+    setAccessTokenExported(accessToken)
+    try {
+      const me = await userService.getMe()
+      setToken(accessToken)
+      setUser(me)
+      return me
+    } catch (error) {
+      setAccessTokenExported(null)
+      throw error
+    }
   }
 
   async function logout() {
     try {
       await authService.logout()
     } catch {
-      // The refresh cookie may already be dead. Local state must still clear.
+      /* Always clear local state. */
     }
-    localStorage.removeItem('accessToken')
+    setAccessTokenExported(null)
     setToken(null)
     setUser(null)
   }
-
-  // Register creates the account only - the backend returns no token for it, so
-  // the caller must send the user to the login page afterwards.
+  async function reloadUser() {
+    const me = await userService.getMe()
+    setUser(me)
+    return me
+  }
   const register = (payload) => authService.register(payload)
-
   return (
-    <AuthContext.Provider value={{ user, token, checking, login, logout, register }}>
+    <AuthContext.Provider value={{ user, token, checking, login, logout, register, reloadUser }}>
       {children}
     </AuthContext.Provider>
   )

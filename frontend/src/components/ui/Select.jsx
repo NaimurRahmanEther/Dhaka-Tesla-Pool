@@ -25,9 +25,7 @@ export default function Select({
         id={selectId}
         aria-invalid={error ? true : undefined}
         aria-describedby={errorId}
-        className={`mt-1.5 block w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 ${
-          error ? 'border-red-400 focus:ring-red-200' : 'border-slate-300 focus:ring-slate-200'
-        }`}
+        className={`field mt-2 ${error ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : ''}`}
         {...rest}
       >
         <option value="" disabled>
