@@ -9,6 +9,7 @@ import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import DriverHome from '@/pages/driver/DriverHome'
 import MyTeslaPage from '@/pages/driver/MyTeslaPage'
+import RequestsPage from '@/pages/driver/RequestsPage'
 import MyRidesPage from '@/pages/passenger/MyRidesPage'
 import PassengerHome from '@/pages/passenger/PassengerHome'
 import RequestRidePage from '@/pages/passenger/RequestRidePage'
@@ -29,9 +30,10 @@ import RoleRoute from '@/routes/RoleRoute'
 //   ProtectedRoute   requires a signed-in user (Phase 5)
 //
 // The dashboard cards and the navbar link to feature pages (payments, history,
-// requests, active trip) that 404 until their phases land - accepted in-progress
-// state, consistent with earlier phases. /request is live since Phase 7,
-// /my-rides and /my-rides/:rideId since Phase 8, /tesla since Phase 9.
+// active trip) that 404 until their phases land - accepted in-progress state,
+// consistent with earlier phases. /request is live since Phase 7, /my-rides and
+// /my-rides/:rideId since Phase 8, /tesla since Phase 9, /requests since
+// Phase 10.
 export default function AppRoutes() {
   return (
     <Routes>
@@ -107,6 +109,18 @@ export default function AppRoutes() {
             <RoleRoute role={ROLES.DRIVER}>
               <AppShell>
                 <MyTeslaPage />
+              </AppShell>
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/requests"
+        element={
+          <ProtectedRoute>
+            <RoleRoute role={ROLES.DRIVER}>
+              <AppShell>
+                <RequestsPage />
               </AppShell>
             </RoleRoute>
           </ProtectedRoute>
