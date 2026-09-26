@@ -80,6 +80,22 @@ async function seedRoadEdges(pool) {
       continue;
     }
 
+    // Check first: `road_edges` has no unique constraint, so `ON CONFLICT`
+    // would never fire and every re-run would duplicate the graph.
+    const existing = await pool.query(
+      `
+        SELECT 1
+        FROM road_edges
+        WHERE from_location_id=$1
+        AND to_location_id=$2
+      `,
+      [fromLocation.rows[0].id, toLocation.rows[0].id],
+    );
+
+    if (existing.rows.length) {
+      continue;
+    }
+
     await pool.query(
       `
         INSERT INTO road_edges
@@ -89,7 +105,6 @@ async function seedRoadEdges(pool) {
             distance_km
         )
         VALUES($1,$2,$3)
-        ON CONFLICT DO NOTHING
       `,
       [fromLocation.rows[0].id, toLocation.rows[0].id, edge.distance],
     );

@@ -18,7 +18,7 @@ const generateAccessToken = (user) => {
     },
     env.JWT_ACCESS_SECRET,
     {
-      expiresIn: "15m",
+      expiresIn: env.ACCESS_TOKEN_EXPIRE || "15m",
     },
   );
 };
@@ -27,10 +27,13 @@ const generateRefreshToken = (user) => {
   return jwt.sign(
     {
       id: user.id,
+      // The role is carried here too: the refresh flow mints a new access token
+      // from this payload, and a token without a role fails the role middleware.
+      role: user.role,
     },
     env.JWT_REFRESH_SECRET,
     {
-      expiresIn: "7d",
+      expiresIn: env.REFRESH_TOKEN_EXPIRE || "7d",
     },
   );
 };

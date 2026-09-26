@@ -1,7 +1,5 @@
 const app = require("./app");
 const testConnection = require("./database/testConnection");
-const errorHandler = require("./middleware/errorHandler");
-const notFound = require("./middleware/notFound");
 const env = require("./config/env");
 
 const PORT = env.PORT || 8000;
@@ -18,8 +16,5 @@ async function startServer() {
     process.exit(1);
   }
 }
-
-app.use(notFound);
-app.use(errorHandler);
 
 startServer();

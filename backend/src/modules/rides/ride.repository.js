@@ -8,22 +8,48 @@ const createRide = async ({
   destinationLocationId,
   seatsRequested,
 }) => {
-  const result = await pool.query(
-    `
-      INSERT INTO rides
-      (
-          passenger_id,
-          pickup_location_id,
-          destination_location_id,
-          seats_requested
-      )
-      VALUES($1,$2,$3,$4)
-      RETURNING *
-    `,
-    [passengerId, pickupLocationId, destinationLocationId, seatsRequested],
-  );
+  const client = await pool.connect();
 
-  return result.rows[0];
+  try {
+    await client.query("BEGIN");
+
+    const result = await client.query(
+      `
+        INSERT INTO rides
+        (
+            passenger_id,
+            pickup_location_id,
+            destination_location_id,
+            seats_requested
+        )
+        VALUES($1,$2,$3,$4)
+        RETURNING *
+      `,
+      [passengerId, pickupLocationId, destinationLocationId, seatsRequested],
+    );
+
+    const ride = result.rows[0];
+
+    // The opening event of the audit trail. Without it a ride's history starts
+    // mid-story and cannot explain how the request came about.
+    await client.query(
+      `
+        INSERT INTO ride_history (ride_id, actor_id, action)
+        VALUES($1,$2,'REQUESTED')
+      `,
+      [ride.id, passengerId],
+    );
+
+    await client.query("COMMIT");
+
+    return ride;
+  } catch (error) {
+    await client.query("ROLLBACK");
+
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 // Get passenger rides
@@ -83,7 +109,9 @@ const cancelRide = async ({ rideId, actorId }) => {
     const rideResult = await client.query(
       `
         UPDATE rides
-        SET status='CANCELLED'
+        SET
+            status='CANCELLED',
+            cancelled_at=CURRENT_TIMESTAMP
         WHERE id=$1
         RETURNING *
       `,
@@ -119,9 +147,29 @@ const cancelRide = async ({ rideId, actorId }) => {
   }
 };
 
+// Is this ride being served by one of the driver's pools? Used to authorise
+// reads of a ride's timeline.
+const isRideInDriverPool = async (rideId, driverId) => {
+  const result = await pool.query(
+    `
+      SELECT 1
+      FROM pool_rides
+      JOIN pools
+      ON pools.id = pool_rides.pool_id
+      WHERE pool_rides.ride_id=$1
+      AND pools.driver_id=$2
+      LIMIT 1
+    `,
+    [rideId, driverId],
+  );
+
+  return result.rows.length > 0;
+};
+
 module.exports = {
   createRide,
   findRidesByPassengerId,
   findRideById,
   cancelRide,
+  isRideInDriverPool,
 };

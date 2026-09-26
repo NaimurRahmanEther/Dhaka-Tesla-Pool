@@ -68,7 +68,31 @@ const findDriverHistory = async (driverId) => {
   return result.rows;
 };
 
+// The event trail for a single ride, oldest first, so the whole lifecycle is
+// visible in the order it happened.
+const findRideTimeline = async (rideId) => {
+  const result = await pool.query(
+    `
+      SELECT
+          ride_history.id,
+          ride_history.action,
+          ride_history.created_at,
+          users.name AS actor_name,
+          users.role AS actor_role
+      FROM ride_history
+      LEFT JOIN users
+      ON ride_history.actor_id = users.id
+      WHERE ride_history.ride_id=$1
+      ORDER BY ride_history.created_at ASC
+    `,
+    [rideId],
+  );
+
+  return result.rows;
+};
+
 module.exports = {
   findPassengerHistory,
   findDriverHistory,
+  findRideTimeline,
 };

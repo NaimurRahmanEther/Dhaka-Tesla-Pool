@@ -1,14 +1,14 @@
 const { calculateFare } = require("./fare.utils");
 
-const calculateRideFare = async ({ distance, isPool }) => {
-  const fare = calculateFare({
-    distance,
-    isPool,
-  });
+// `isPool` unlocks the discount. Returns the breakdown alongside the total
+// so callers can store the total and show the passenger the parts.
+const calculateRideFare = async ({ distance, isPool = false }) => {
+  const breakdown = calculateFare({ distance, isPool });
 
   return {
     distance,
-    fare,
+    isPool,
+    ...breakdown,
   };
 };
 

@@ -16,6 +16,20 @@ const isDetourAcceptable = (oldDistance, newDistance) => {
   return detour <= MAX_DETOUR_DISTANCE;
 };
 
+// Drop stops the Tesla already makes, so a matching pickup and destination
+// cannot produce a route like [1, 1, 2, 3, 3].
+const collapseConsecutiveDuplicates = (route) => {
+  const collapsed = [];
+
+  for (const stop of route) {
+    if (collapsed[collapsed.length - 1] !== stop) {
+      collapsed.push(stop);
+    }
+  }
+
+  return collapsed;
+};
+
 // Generate possible routes
 
 const generateInsertionRoutes = (currentRoute, pickup, destination) => {
@@ -31,7 +45,7 @@ const generateInsertionRoutes = (currentRoute, pickup, destination) => {
         ...currentRoute.slice(j),
       ];
 
-      routes.push(route);
+      routes.push(collapseConsecutiveDuplicates(route));
     }
   }
 

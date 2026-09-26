@@ -63,6 +63,27 @@ const findVehicleById = async (id) => {
   return result.rows[0];
 };
 
+// Seats already booked across this vehicle's active pools
+const getActivePoolOccupiedSeats = async (vehicleId) => {
+  const result = await pool.query(
+    `
+      SELECT COALESCE(MAX(occupied), 0) AS busiest
+      FROM (
+          SELECT SUM(pool_rides.seats_allocated) AS occupied
+          FROM pool_rides
+          JOIN pools
+          ON pools.id = pool_rides.pool_id
+          WHERE pools.vehicle_id=$1
+          AND pools.status='ACTIVE'
+          GROUP BY pool_rides.pool_id
+      ) AS per_pool
+    `,
+    [vehicleId],
+  );
+
+  return Number(result.rows[0].busiest);
+};
+
 // Update vehicle
 
 const updateVehicle = async (id, { model, capacity, currentLocationId }) => {
@@ -103,6 +124,7 @@ module.exports = {
   createVehicle,
   findVehicleByDriverId,
   findVehicleById,
+  getActivePoolOccupiedSeats,
   updateVehicle,
   updateVehicleStatus,
 };

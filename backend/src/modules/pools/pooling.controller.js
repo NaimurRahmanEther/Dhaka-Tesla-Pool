@@ -17,6 +17,13 @@ const addPassengerToPool = asyncHandler(async (req, res) => {
   if (!ride) {
     throw new AppError("Ride not found", 404);
   }
+  // A passenger may only add their own unclaimed ride to a pool.
+  if (ride.passenger_id !== req.user.id) {
+    throw new AppError("You cannot add another passenger's ride", 403);
+  }
+  if (ride.status !== "REQUESTED") {
+    throw new AppError("Ride is not open for pooling", 400);
+  }
   const result = await poolingService.addPassengerToPool({
     poolId,
     ride,
@@ -33,7 +40,7 @@ const addPassengerToPool = asyncHandler(async (req, res) => {
 
 const getPoolPassengers = asyncHandler(async (req, res) => {
   const poolId = Number(req.params.poolId);
-  const result = await poolingService.getPoolPassengers(poolId);
+  const result = await poolingService.getPoolPassengers(poolId, req.user.id);
   return successResponse(
     res,
     200,

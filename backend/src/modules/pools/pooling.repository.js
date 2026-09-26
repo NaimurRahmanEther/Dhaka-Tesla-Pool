@@ -1,13 +1,21 @@
 const pool = require("../../database/db");
 
-// Find active pool and lock row
+// Find active pool and lock row. Both tables have `capacity`, so both are
+// aliased - `SELECT *` returned one of the two at random.
 
 const findActivePoolWithLock = async (client, poolId) => {
   const result = await client.query(
     `
       SELECT
-          pools.*,
-          vehicles.capacity
+          pools.id,
+          pools.vehicle_id,
+          pools.driver_id,
+          pools.status,
+          pools.capacity AS pool_capacity,
+          vehicles.capacity AS vehicle_capacity,
+          vehicles.model,
+          pools.current_route,
+          pools.route_updated_at
       FROM pools
       JOIN vehicles
       ON pools.vehicle_id = vehicles.id
@@ -78,17 +86,61 @@ const updatePoolRoute = async (client, { poolId, route }) => {
   return result.rows[0];
 };
 
-// Update passenger fare
-
-const updateRideFare = async (client, { rideId, fare }) => {
+// Record the fare and the MATCHED move together, so a ride is never pooled
+// without the fare that was charged for it.
+const confirmRideInPool = async (
+  client,
+  { rideId, fare, fareBreakdown = null },
+) => {
   const result = await client.query(
     `
       UPDATE rides
-      SET fare=$1
-      WHERE id=$2
+      SET
+          fare=$1,
+          fare_breakdown=$2,
+          status='MATCHED',
+          matched_at=CURRENT_TIMESTAMP
+      WHERE id=$3
       RETURNING *
     `,
-    [fare, rideId],
+    [fare, fareBreakdown ? JSON.stringify(fareBreakdown) : null, rideId],
+  );
+
+  return result.rows[0];
+};
+
+// Find pool owner, used to authorise driver-scoped reads
+const findPoolById = async (poolId) => {
+  const result = await pool.query(
+    `
+      SELECT
+          id,
+          vehicle_id,
+          driver_id,
+          status
+      FROM pools
+      WHERE id=$1
+    `,
+    [poolId],
+  );
+
+  return result.rows[0];
+};
+
+// The Tesla behind a pool, for capacity and model.
+const getPoolVehicle = async (poolId) => {
+  const result = await pool.query(
+    `
+      SELECT
+          vehicles.id,
+          vehicles.model,
+          vehicles.capacity
+      FROM pools
+      JOIN vehicles
+      ON pools.vehicle_id = vehicles.id
+      WHERE pools.id=$1
+    `,
+    [poolId],
   );
 
   return result.rows[0];
@@ -134,9 +186,11 @@ const getPoolPassengers = async (poolId) => {
 
 module.exports = {
   findActivePoolWithLock,
+  findPoolById,
+  getPoolVehicle,
   getOccupiedSeats,
   addRideToPool,
   updatePoolRoute,
-  updateRideFare,
+  confirmRideInPool,
   getPoolPassengers,
 };

@@ -2,7 +2,8 @@ const pool = require("../../database/db");
 
 const poolingRepository = require("./pooling.repository");
 
-const { findBestRoute, isDetourAcceptable } = require("./pooling.algorithm");
+// The route optimiser measures the insertion route and applies the detour limit.
+const { findBestRoute, isDetourAcceptable } = require("./pooling.route.optimizer");
 
 const graphService = require("../graph/graph.service");
 
@@ -30,10 +31,15 @@ const addPassengerToPool = async ({ poolId, ride }) => {
       poolId,
     );
 
-    const availableSeats = activePool.capacity - occupiedSeats;
+    // Live capacity from the Tesla, not the pool's opening snapshot.
+    const availableSeats = activePool.vehicle_capacity - occupiedSeats;
 
     if (availableSeats < ride.seats_requested) {
-      throw new AppError("Not enough seats available", 400);
+      throw new AppError(
+        `Not enough seats available: ${availableSeats} left, ${ride.seats_requested} requested`,
+        409,
+        "NO_SEAT_AVAILABLE",
+      );
     }
 
     if (!activePool.current_route) {
@@ -77,6 +83,12 @@ const addPassengerToPool = async ({ poolId, ride }) => {
       seatsAllocated: ride.seats_requested,
     });
 
+    const updatedRide = await poolingRepository.confirmRideInPool(client, {
+      rideId: ride.id,
+      fare: fareResult.fare,
+      fareBreakdown: fareResult,
+    });
+
     const updatedPool = await poolingRepository.updatePoolRoute(client, {
       poolId,
       route: {
@@ -85,28 +97,14 @@ const addPassengerToPool = async ({ poolId, ride }) => {
       },
     });
 
-    await poolingRepository.updateRideFare(client, {
-      rideId: ride.id,
-      fare: fareResult.fare,
-    });
-
-    const updatedRide = await client.query(
-      `
-        UPDATE rides
-        SET status='MATCHED'
-        WHERE id=$1
-        RETURNING *
-      `,
-      [ride.id],
-    );
-
     await client.query("COMMIT");
 
     return {
       poolRide,
       pool: updatedPool,
-      ride: updatedRide.rows[0],
+      ride: updatedRide,
       fare: fareResult.fare,
+      fareBreakdown: fareResult,
     };
   } catch (error) {
     await client.query("ROLLBACK");
@@ -119,24 +117,36 @@ const addPassengerToPool = async ({ poolId, ride }) => {
 
 // Get passengers inside pool
 
-const getPoolPassengers = async (poolId) => {
-  const passengers = await poolingRepository.getPoolPassengers(poolId);
+const getPoolPassengers = async (poolId, driverId) => {
+  // A pool manifest lists every passenger's route and fare, so it is only
+  // readable by the driver who owns that Tesla.
+  const poolRow = await poolingRepository.findPoolById(poolId);
 
-  if (!passengers.length) {
-    throw new AppError("No passengers found in pool", 404);
+  if (!poolRow) {
+    throw new AppError("Pool not found", 404);
   }
 
-  const capacity = passengers[0].capacity;
+  if (poolRow.driver_id !== driverId) {
+    throw new AppError("You cannot view this pool", 403);
+  }
+
+  const passengers = await poolingRepository.getPoolPassengers(poolId);
 
   const occupiedSeats = passengers.reduce(
     (total, item) => total + item.seats_allocated,
     0,
   );
 
+  // Capacity and model come from the Tesla, so a freshly opened pool with no
+  // passengers yet still answers instead of 404.
+  const vehicle = await poolingRepository.getPoolVehicle(poolId);
+
+  const capacity = vehicle ? vehicle.capacity : poolRow.capacity;
+
   return {
     poolId,
     vehicle: {
-      model: passengers[0].model,
+      model: vehicle ? vehicle.model : null,
       capacity,
     },
     occupiedSeats,
@@ -146,7 +156,7 @@ const getPoolPassengers = async (poolId) => {
       name: item.passenger_name,
       pickup: item.pickup_location,
       destination: item.destination_location,
-      seats: item.seats_allocated,
+      seatsAllocated: item.seats_allocated,
       status: item.ride_status,
       fare: item.fare,
     })),

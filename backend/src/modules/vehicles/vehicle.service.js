@@ -41,6 +41,21 @@ const updateVehicle = async (driverId, vehicleId, data) => {
     throw new AppError("You cannot update this vehicle", 403);
   }
 
+  // Never let a driver shrink their Tesla below the seats already booked in an
+  // active pool, otherwise the pool would be permanently over capacity.
+  if (typeof data.capacity === "number" && data.capacity < vehicle.capacity) {
+    const booked = await vehicleRepository.getActivePoolOccupiedSeats(
+      vehicleId,
+    );
+
+    if (booked > data.capacity) {
+      throw new AppError(
+        `Cannot reduce capacity to ${data.capacity}: ${booked} seats are already booked in an active pool`,
+        409,
+      );
+    }
+  }
+
   return vehicleRepository.updateVehicle(vehicleId, data);
 };
 
