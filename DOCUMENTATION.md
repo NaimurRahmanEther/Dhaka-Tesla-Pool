@@ -557,7 +557,7 @@ The seed script only creates locations and road edges. **No user accounts are se
 | **Payments** | Simulated (Cash / TeslaPay wallet) | No Stripe/PayPal integration; no real money |
 | **Scale** | Single Postgres, no read replicas | Good for MVP; needs read replicas at 100k+ users |
 | **Auth** | JWT (memory) + httpOnly refresh cookie | No MFA, no OAuth providers (Google/Apple) |
-| **Matching** | Same pickup zone + detour ≤ 5km | No ML ranking, no dynamic pricing |
+| **Matching** | Same pickup zone + detour ≤ 2km | No ML ranking, no dynamic pricing |
 | **Capacity** | `SELECT ... FOR UPDATE` on vehicle row | Serializes concurrent bookings; slight latency |
 | **State Machine** | SQL CHECK constraints + application logic | Forward-only transitions enforced at DB level |
 
@@ -758,7 +758,7 @@ type(scope): short description
 ### 19.2 Route Optimization (`pooling.route.optimizer.js`)
 - **Input**: Current route (array of location IDs), new pickup, new destination
 - **Algorithm**: Generate all valid insertion permutations (pickup before destination), collapse consecutive duplicates, score by total distance
-- **Constraint**: Detour ≤ 5 km (`MAX_DETOUR_DISTANCE`)
+- **Constraint**: Detour ≤ 2 km (`MAX_DETOUR_DISTANCE`)
 - **Output**: Optimized route with minimum added distance
 
 ### 19.3 Matching Score (`matching.service.js`)

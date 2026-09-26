@@ -1,3 +1,5 @@
+import { readApiPayload } from './response'
+
 // src/api/client.js
 // The only file in the whole app that calls fetch().
 //
@@ -86,12 +88,7 @@ async function request(path, { method = 'GET', body } = {}) {
     }
   }
 
-  let payload
-  try {
-    payload = await response.json()
-  } catch {
-    payload = null
-  }
+  const payload = await readApiPayload(response)
 
   if (!response.ok) {
     if (response.status === 401 && !path.startsWith('/auth/')) {

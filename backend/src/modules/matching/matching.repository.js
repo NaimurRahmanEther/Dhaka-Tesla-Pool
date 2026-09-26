@@ -132,6 +132,8 @@ const assignRideToPool = async ({
   rideId,
   seatsAllocated,
   route,
+  buildRoute,
+  replaceDriverRoute = false,
 }) => {
   const client = await pool.connect();
 
@@ -166,6 +168,13 @@ const assignRideToPool = async ({
     );
 
     let activePool = poolResult.rows[0];
+    if (replaceDriverRoute && activePool) {
+      throw new AppError("You can change your route only before accepting your first passenger", 409);
+    }
+
+    // Recalculate with the locked pool so simultaneous acceptances cannot
+    // overwrite one another's stops with a stale route.
+    if (buildRoute) route = await buildRoute(vehicle, activePool);
 
     if (!activePool) {
       const newPool = await client.query(
@@ -213,6 +222,16 @@ const assignRideToPool = async ({
         `Not enough seats available: ${availableSeats} left, ${seatsAllocated} requested`,
         409,
         "NO_SEAT_AVAILABLE",
+      );
+    }
+
+    if (replaceDriverRoute) {
+      // Save the new plan in the same transaction as the first acceptance.
+      await client.query(
+        `INSERT INTO driver_routes
+          (driver_id, start_location_id, destination_location_id, route)
+         VALUES ($1,$2,$3,$4)`,
+        [driverId, vehicle.current_location_id, route.driverDestinationId, JSON.stringify(route)],
       );
     }
 

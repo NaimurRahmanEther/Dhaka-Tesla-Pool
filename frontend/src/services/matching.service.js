@@ -17,5 +17,6 @@ export default {
   // POST /matching/:rideId/accept — claims a seat for the ride. Returns
   // { assignment, driver, vehicleId, pooled, route, fare, fareBreakdown }.
   // A race for the last seat comes back as 409 with a NO_SEAT reason.
-  acceptRequest: (rideId) => client.post(`/matching/${rideId}/accept`),
+  acceptRequest: (rideId, { changeRoute = false } = {}) =>
+    client.post(`/matching/${rideId}/accept`, { changeRoute }),
 }

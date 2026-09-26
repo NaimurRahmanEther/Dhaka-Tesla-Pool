@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/Editor
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Documentation
+README.md
+DOCUMENTATION.md
+
+# Docker
+docker-compose*.yml
+docker-compose.override.yml
+
+# Logs
+*.log
+logs
+
+# Temporary files
+tmp
+temp
+*.tmp
+
+# Database
+*.sqlite
+*.db
+
+# Node modules (in subdirectories)
+**/node_modules
+
+# Build outputs
+**/dist
+**/build

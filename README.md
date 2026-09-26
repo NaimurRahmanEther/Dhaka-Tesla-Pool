@@ -63,7 +63,9 @@ curl http://localhost:8000/health
 - Runs migrations automatically
 - Seeds 8 Dhaka locations + road graph (Banani, Gulshan, Mohakhali, Dhanmondi, Mirpur, Uttara, Farmgate, Bashundhara)
 - Starts backend on `:8000`
-- Starts frontend dev server on `:5173`
+- Builds the frontend and serves it with Nginx on `:5173`, proxying `/api` to the backend
+
+Compose supplies shared database settings to PostgreSQL and the backend; auth secrets come from `backend/.env`. The database volume is preserved between restarts. For custom database settings on a fresh setup, use `docker compose --env-file backend/.env up --build`. An existing database volume retains its original credentials, even if environment values change.
 
 ---
 
@@ -313,12 +315,24 @@ Auth: `Authorization: Bearer <accessToken>` (access tokens 15 min; refresh token
 
 ## Matching & Routing
 
+### Simple trip routes
+
+- In **My Tesla**, select the current location and destination, then choose **Plan my route**. The backend uses the existing Dijkstra road graph and saves the location and route together.
+- The route appears as a numbered list of locations with total distance, using the existing frontend card and timeline styles.
+- Accepting a passenger recalculates the shared route with their pickup before their destination. The driver's starting location and selected final destination are preserved, and the configured detour limit (currently 2 km) applies.
+- Before the first passenger is accepted, an out-of-route request offers **Change route and accept**, with a preview. This explicitly replaces the driver's destination with the passenger's destination and saves the new route together with the acceptance. Subsequent passengers must fit that shared route and available seats; they cannot override the detour limit. The accept endpoint takes optional `{ "changeRoute": true }` for this first-passenger action only.
+- **Active trip**, **Ride details**, and the accepted-request summary show the shared route, including intermediate graph locations. Use **Refresh** to retrieve changes; these screens do not track GPS or stream route updates.
+- Complete the active trip, then use **Plan your next route** to manually update the location and destination. Changing the next trip's plan is blocked while a pool is active.
+- Route data is included in the existing responses: `current_route` on `/trips/my-active`, and `trip_route` on `/rides/my`. `POST /driver-routes` accepts an optional `currentLocationId` alongside `destinationLocationId`. No schema migration is required.
+
+Route checks: run `npm test` from `backend` for the focused tests, and `npm run test:routes:integration` for the full API flow against PostgreSQL. The integration check creates and removes an isolated test schema. When running it from the host with a Docker database, set `DB_HOST=127.0.0.1` for that command.
+
 **Predefined Dhaka zones** (8 locations, seeded):
 - Banani, Gulshan, Mohakhali, Dhanmondi, Mirpur, Uttara, Farmgate, Bashundhara
 
 **Matching rules** (applied consistently for Nusrat + Rafiq):
 - Same pickup zone → detour = 0, fits = true
-- Compatible routes → detour ≤ 5 km (Dijkstra on road graph)
+- Compatible routes → detour ≤ 2 km (Dijkstra on road graph)
 - Same destination zone prioritized
 
 **Road graph** — seeded with edges; Dijkstra computes shortest paths. Banani → Mohakhali = 8 km (matches PRD).
@@ -452,7 +466,7 @@ curl -X POST http://localhost:8000/matching/1/accept -H "Authorization: Bearer $
 | Payments | Simulated (Cash/TeslaPay) | No Stripe/PayPal integration |
 | Scale | Single Postgres, no read replicas | Good for MVP; needs read replicas at 100k+ |
 | Auth | JWT + httpOnly cookie | No MFA, no OAuth providers |
-| Matching | Same pickup zone + detour ≤ 5km | No ML ranking, no dynamic pricing |
+| Matching | Same pickup zone + detour ≤ 2km | No ML ranking, no dynamic pricing |
 
 ### When to switch later
 | Trigger | Switch to |
