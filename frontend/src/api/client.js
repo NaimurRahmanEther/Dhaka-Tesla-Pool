@@ -53,7 +53,7 @@ async function refreshAccessToken() {
   }
 }
 
-async function request(path, { method = 'GET', body, raw = false } = {}) {
+async function request(path, { method = 'GET', body } = {}) {
   const headers = { 'Content-Type': 'application/json' }
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
@@ -91,10 +91,9 @@ async function request(path, { method = 'GET', body, raw = false } = {}) {
     throw error
   }
 
-  // The normal envelope carries the payload under `data`. A `raw` request
-  // returns the whole body instead - needed for GET /health, which does not use
-  // the envelope.
-  return raw ? payload : payload?.data
+  // The envelope carries the payload under `data`, which is all this app ever
+  // needs from a successful response.
+  return payload?.data
 }
 
 export default {

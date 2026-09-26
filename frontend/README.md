@@ -119,6 +119,11 @@ src/
 4. **No business logic inside pages.** Rules that need explaining — can this ride
    still be cancelled? — live in `lib/`, where they can be reasoned about and tested.
 5. **Every screen that loads data renders three states: loading, error, and empty.**
+6. **Pages compose the UI kit, never hand-roll UI.** Buttons, inputs, cards, badges,
+   spinners, alerts and empty states come from `src/components/ui/`. The kit is
+   strictly presentational — no component there fetches, navigates, or knows the
+   backend exists. The one exception is `Badge`, which maps the status strings from
+   `lib/constants.js` to colours.
 
 ### No hardcoded data
 
@@ -207,11 +212,11 @@ return data.map((ride) => <RideCard key={ride.id} ride={ride} />)
 `reload` is what a cancel, an accept, or a status change calls so the list reflects
 the server instead of guessing at the new state locally.
 
-The landing page is the working example of this pattern: it fetches `GET /health`
-and `GET /location` through `useApi`, so the "API online"/"Database connected"
-pills and the city-stop list it renders are live answers from the backend, not
-marketing copy. If the backend is down the page says so and offers a Try again
-button wired to `reload`.
+The landing page is the working example of this pattern: it fetches `GET /location`
+through `useApi`, so the city-stop list it renders is a live answer from the
+backend, not marketing copy. It deliberately shows no backend internals — no
+health checks, no database state — because that is a customer-facing page, not a
+monitoring dashboard.
 
 ### Token expiry
 
