@@ -1,13 +1,22 @@
-// Top of every page: title, a one-line description, and an optional action slot
-// on the right (a "New ride" button, a back link, a role badge).
-export default function PageHeader({ title, description, children, className = '' }) {
+export default function PageHeader({
+  title,
+  description,
+  children,
+  className = '',
+  eyebrow = 'YOUR EVERYDAY, SHARED',
+}) {
   return (
-    <div className={`flex flex-wrap items-start justify-between gap-4 ${className}`}>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
-        {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+    <div className={`flex flex-wrap items-end justify-between gap-5 ${className}`}>
+      <div className="min-w-0">
+        <p className="eyebrow mb-3">{eyebrow}</p>
+        <h1 className="text-3xl font-bold tracking-tight text-brand-900 sm:text-4xl">{title}</h1>
+        {description && (
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
+            {description}
+          </p>
+        )}
       </div>
-      {children && <div className="flex items-center gap-3">{children}</div>}
+      {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
     </div>
   )
 }

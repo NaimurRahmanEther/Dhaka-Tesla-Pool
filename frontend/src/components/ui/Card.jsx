@@ -1,9 +1,9 @@
-// Plain container: white, rounded, bordered, padded. Everything else is passed
-// through className, so this stays a box rather than a layout system - pages
-// compose it as they like.
-export default function Card({ className = '', children }) {
+export default function Card({ className = '', children, ...props }) {
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white p-6 shadow-sm ${className}`}>
+    <div
+      className={`rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_3px_18px_-12px_#12392e30] sm:p-7 ${className}`}
+      {...props}
+    >
       {children}
     </div>
   )

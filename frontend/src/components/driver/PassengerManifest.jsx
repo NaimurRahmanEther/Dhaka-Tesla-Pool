@@ -1,44 +1,47 @@
-import { Badge } from '@/components/ui'
+import { Badge, Icon } from '@/components/ui'
 import { formatTaka } from '@/lib/format'
-
-// Who is in the driver's Tesla right now. The backend computes the seat
-// numbers and each rider's fare, so this component only lays them out — it
-// never adds seats or recomputes a fare. A rider row comes from
-// GET /pool/:poolId/passengers with { rideId, name, pickup, destination,
-// seatsAllocated, status, fare }.
 export default function PassengerManifest({ manifest }) {
   const { vehicle, occupiedSeats, availableSeats, passengers } = manifest
-
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">
-          Passengers in your Tesla
-        </h3>
-        <p className="text-xs text-slate-500">
-          {occupiedSeats} occupied · {availableSeats} free of {vehicle.capacity}
-        </p>
+      <h2 className="text-lg font-bold text-brand-900">Your travel company</h2>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="rounded-xl bg-brand-50 p-4">
+          <p className="text-2xl font-bold text-brand-800">
+            {occupiedSeats}
+            <span className="text-sm font-normal text-brand-500"> / {vehicle.capacity}</span>
+          </p>
+          <p className="mt-1 text-xs text-brand-600">Seats occupied</p>
+        </div>
+        <div className="rounded-xl bg-canvas p-4">
+          <p className="text-2xl font-bold text-brand-800">{availableSeats}</p>
+          <p className="mt-1 text-xs text-slate-500">Seats available</p>
+        </div>
       </div>
-
-      {passengers.length === 0 ? (
-        <p className="mt-4 text-sm text-slate-500">No riders in this pool yet.</p>
+      {!passengers.length ? (
+        <p className="mt-6 text-sm text-slate-500">No passengers in this pool yet.</p>
       ) : (
-        <ul className="mt-4 divide-y divide-slate-100">
+        <ul className="mt-5 divide-y divide-slate-100">
           {passengers.map((passenger) => (
-            <li key={passenger.rideId} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-slate-900">{passenger.name}</p>
-                <p className="mt-0.5 truncate text-xs text-slate-500">
-                  {passenger.pickup} → {passenger.destination}
-                </p>
+            <li key={passenger.rideId} className="py-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Icon name="user" className="h-4 w-4 text-brand-500" />
+                  <p className="text-sm font-semibold text-brand-900">{passenger.name}</p>
+                </div>
+                <Badge status={passenger.status} />
               </div>
-              <span className="text-xs text-slate-500">
-                {passenger.seatsAllocated} seat{passenger.seatsAllocated > 1 ? 's' : ''}
-              </span>
-              <Badge status={passenger.status} />
-              <span className="w-20 text-right text-sm font-semibold text-slate-900">
-                {passenger.fare === null ? '—' : `${formatTaka(passenger.fare)} BDT`}
-              </span>
+              <p className="mt-3 text-sm leading-6 text-slate-500">
+                {passenger.pickup} → {passenger.destination}
+              </p>
+              <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+                <span>
+                  {passenger.seatsAllocated} seat(s) · Ride #{passenger.rideId}
+                </span>
+                <span className="font-bold text-brand-700">
+                  {passenger.fare == null ? 'Fare pending' : formatTaka(passenger.fare) + ' BDT'}
+                </span>
+              </div>
             </li>
           ))}
         </ul>

@@ -1,172 +1,186 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-
+import { useState } from 'react'
 import RequestCard from '@/components/driver/RequestCard'
 import FareBreakdown from '@/components/ride/FareBreakdown'
-import { Alert, Button, Card, EmptyState, PageHeader, Spinner } from '@/components/ui'
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Icon,
+  Input,
+  LinkButton,
+  PageHeader,
+  Spinner,
+} from '@/components/ui'
 import useApi from '@/hooks/useApi'
+import usePolling from '@/hooks/usePolling'
 import matchingService from '@/services/matching.service'
 
-// The driver's request board. Rides waiting for a driver, enriched with the
-// fields the backend already computed for this driver's Tesla, sorted takeable
-// first by the backend — the page hands that order straight through.
-//
-// A 403 here means the driver has no Tesla or is offline: the backend is
-// telling us the driver is not visible on the board. That is an onboarding
-// state, not an error, so the page explains it in plain language and links to
-// the Tesla page.
 export default function RequestsPage() {
-  const {
-    data: requests,
-    loading: requestsLoading,
-    error: requestsError,
-    reload,
-  } = useApi(() => matchingService.getOpenRequests(), [])
-
-  // One accept at a time. `acceptingId` is the ride currently in flight; every
-  // card's button is disabled while one is running so a double click cannot
-  // burn two rides.
-  const [acceptingId, setAcceptingId] = useState(null)
-  const [acceptResult, setAcceptResult] = useState(null)
-  const [acceptError, setAcceptError] = useState(null)
-
-  // The board refreshes itself every 10 seconds so a new rider appears without
-  // a manual reload. Skipped while an accept is in flight so the accept
-  // response and the refresh cannot interleave. The refs keep the interval
-  // reading the latest values without restarting on every render.
-  const acceptingRef = useRef(acceptingId)
-  useEffect(() => {
-    acceptingRef.current = acceptingId
-  })
-
-  const reloadRef = useRef(reload)
-  useEffect(() => {
-    reloadRef.current = reload
-  })
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (!acceptingRef.current) reloadRef.current()
-    }, 10000)
-    return () => clearInterval(timer)
-  }, [])
-
-  async function handleAccept(request) {
-    setAcceptingId(request.id)
-    setAcceptError(null)
-
+  const requests = useApi(matchingService.getOpenRequests, [])
+  const [accepting, setAccepting] = useState(null)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState(null)
+  const [query, setQuery] = useState('')
+  const [fitsOnly, setFitsOnly] = useState(false)
+  usePolling(requests.reload, !accepting && !requests.error, 10000)
+  const filtered = (requests.data ?? []).filter(
+    (r) =>
+      (!fitsOnly || (r.fitsInMyTesla && r.detourAcceptable)) &&
+      (r.passenger_name + ' ' + r.pickup_location + ' ' + r.destination_location)
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+  )
+  async function accept(request) {
+    setAccepting(request.id)
+    setError(null)
     try {
-      const result = await matchingService.acceptRequest(request.id)
-      setAcceptResult(result)
-      // The accepted ride has left the board; refresh so it disappears and the
-      // free-seat counts on the remaining cards stay truthful.
-      reload()
+      setResult(await matchingService.acceptRequest(request.id))
+      requests.reload()
     } catch (err) {
-      setAcceptError(err)
-      // The board may have changed under us (that seat was just taken) — show
-      // the fresh state instead of a stale card.
-      reload()
+      setError(err.message)
+      requests.reload()
     } finally {
-      setAcceptingId(null)
+      setAccepting(null)
     }
   }
-
-  const notOnBoard = requestsError?.status === 403
-
   return (
     <>
       <PageHeader
-        title="Request board"
-        description="Riders waiting for a Tesla — accept the ones that fit your route."
-      />
-
-      {acceptResult && (
-        <Card className="mt-6 border-emerald-200">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+        title="Find your next shared journey."
+        description="Passenger requests, ordered by how well they fit your Tesla."
+        eyebrow="RIDE REQUESTS"
+      >
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={requests.loading}
+          disabled={accepting !== null}
+          onClick={requests.reload}
+        >
+          <Icon name="refresh" className="h-4 w-4" />
+          Refresh
+        </Button>
+      </PageHeader>
+      {result && (
+        <Card className="mt-7 border-brand-100">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Ride #{acceptResult.assignment.ride.id} accepted
+              <p className="eyebrow">YOU’RE MATCHED</p>
+              <h2 className="mt-2 text-xl font-bold text-brand-900">
+                Ride #{result.assignment.ride.id} is coming along.
               </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                {acceptResult.driver}&apos;s Tesla ·{' '}
-                {acceptResult.pooled ? 'joined your active pool' : 'first ride in this pool'}
+              <p className="mt-2 text-sm text-slate-500">
+                {result.pooled
+                  ? 'This passenger joined your existing pool.'
+                  : 'Your new pool is ready.'}
               </p>
             </div>
-            <Button size="sm" variant="secondary" onClick={() => setAcceptResult(null)}>
-              Close
-            </Button>
+            <button
+              aria-label="Dismiss accepted ride summary"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl hover:bg-slate-100"
+              onClick={() => setResult(null)}
+            >
+              <Icon name="close" />
+            </button>
           </div>
-
-          <div className="mt-5 max-w-sm">
-            <FareBreakdown breakdown={acceptResult.fareBreakdown} />
+          <div className="mt-5 max-w-md">
+            <FareBreakdown breakdown={result.fareBreakdown} />
           </div>
-
-          <p className="mt-4 text-sm text-slate-600">
-            {acceptResult.pooled
-              ? 'This rider joined an existing trip in your Tesla — the shared-trip discount is applied.'
-              : 'This is the first rider in this pool — full fare for now. A second rider on the same trip earns them the shared-trip discount.'}
-          </p>
+          <LinkButton to="/active-trip" className="mt-5">
+            Open active trip <Icon name="arrow" />
+          </LinkButton>
         </Card>
       )}
-
-      {acceptError && (
-        <div className="mt-6">
-          <Alert tone="error">{acceptError.message}</Alert>
-        </div>
+      {error && (
+        <Alert tone="error" className="mt-6">
+          {error}
+        </Alert>
       )}
-
-      {notOnBoard && (
+      {requests.error?.status === 403 ? (
+        <EmptyState
+          className="mt-8"
+          icon="car"
+          title="Let’s get you ready to drive"
+          description={requests.error.message}
+        >
+          <LinkButton to="/tesla">
+            Set up My Tesla <Icon name="arrow" />
+          </LinkButton>
+        </EmptyState>
+      ) : requests.error ? (
         <div className="mt-8">
-          <EmptyState
-            title="You are not visible to riders yet"
-            description={requestsError.message}
-          >
-            <Link
-              to="/tesla"
-              className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-            >
-              Open My Tesla
-            </Link>
-          </EmptyState>
-        </div>
-      )}
-
-      {requestsError && !notOnBoard && (
-        <div className="mt-8 max-w-md">
-          <Alert tone="error">{requestsError.message}</Alert>
-          <Button className="mt-4" onClick={reload}>
+          <Alert tone="error">{requests.error.message}</Alert>
+          <Button className="mt-4" onClick={requests.reload}>
             Try again
           </Button>
         </div>
-      )}
-
-      {requestsLoading && requests === null && (
-        <div className="flex justify-center py-20">
-          <Spinner size="lg" />
-        </div>
-      )}
-
-      {!requestsLoading && !notOnBoard && requests && requests.length === 0 && (
-        <div className="mt-8">
-          <EmptyState
-            title="No open requests"
-            description="When a rider requests a trip, it appears here. Keep your Tesla online with free seats to stay on the board."
-          />
-        </div>
-      )}
-
-      {requests && requests.length > 0 && (
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          {requests.map((request) => (
-            <RequestCard
-              key={request.id}
-              request={request}
-              accepting={acceptingId === request.id}
-              acceptBlocked={acceptingId !== null}
-              onAccept={handleAccept}
+      ) : (
+        <>
+          <div className="mt-8 flex flex-wrap items-end justify-between gap-4">
+            <Input
+              className="w-full sm:max-w-sm"
+              label="Find a request"
+              type="search"
+              placeholder="Search passengers or stops…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
             />
-          ))}
-        </div>
+            <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={fitsOnly}
+                onChange={(e) => setFitsOnly(e.target.checked)}
+                className="h-4 w-4 accent-brand-700"
+              />
+              Only rides that fit
+            </label>
+          </div>
+          <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
+            <Icon name="refresh" className="h-3 w-3" />
+            Refreshes automatically while you’re here.
+          </p>
+          {requests.loading && requests.data === null ? (
+            <div className="py-16">
+              <Spinner label="Loading passenger requests" />
+            </div>
+          ) : !filtered.length ? (
+            <EmptyState
+              className="mt-6"
+              icon="users"
+              title={requests.data?.length ? 'No matching requests' : 'A quiet moment on the road'}
+              description={
+                requests.data?.length
+                  ? 'Try another search or turn off the fit filter.'
+                  : 'New passenger requests will appear here. Keep your Tesla online when you’re ready.'
+              }
+            >
+              {requests.data?.length > 0 && (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setQuery('')
+                    setFitsOnly(false)
+                  }}
+                >
+                  Clear filters
+                </Button>
+              )}
+            </EmptyState>
+          ) : (
+            <div className="mt-6 grid gap-5 xl:grid-cols-2">
+              {filtered.map((request) => (
+                <RequestCard
+                  key={request.id}
+                  request={request}
+                  accepting={accepting === request.id}
+                  acceptBlocked={accepting !== null}
+                  onAccept={accept}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </>
   )

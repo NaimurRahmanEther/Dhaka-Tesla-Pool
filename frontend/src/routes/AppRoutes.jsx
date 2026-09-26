@@ -1,6 +1,6 @@
 import { Route, Routes } from 'react-router-dom'
-
 import AppShell from '@/components/layout/AppShell'
+import useAuth from '@/hooks/useAuth'
 import { ROLES } from '@/lib/constants'
 import LandingPage from '@/pages/LandingPage'
 import NotFoundPage from '@/pages/NotFoundPage'
@@ -23,23 +23,13 @@ import ProtectedRoute from '@/routes/ProtectedRoute'
 import PublicOnlyRoute from '@/routes/PublicOnlyRoute'
 import RoleRoute from '@/routes/RoleRoute'
 
-// The single source of truth for which URL renders which page. It grows one
-// <Route> at a time as features land. Declarative <Routes> rather than
-// createBrowserRouter, so it reads top-to-bottom like the route mounting in the
-// backend's src/app.js.
-//
-// Public pages sit directly in the table. Signed-in pages are wrapped in three
-// layers, inside out:
-//   AppShell         renders Navbar + the content column (Phase 6)
-//   RoleRoute        blocks the wrong role (Phase 5)
-//   ProtectedRoute   requires a signed-in user (Phase 5)
-//
-// The dashboard cards and the navbar link to feature pages (payments, history)
-// that 404 until their phases land - accepted in-progress state, consistent
-// with earlier phases. /request is live since Phase 7, /my-rides and
-// /my-rides/:rideId since Phase 8, /tesla since Phase 9, /requests since
-// Phase 10, /active-trip since Phase 11, /join-pool since Phase 12,
-// /payments since Phase 13, /history since Phase 14.
+function HistoryPage() {
+  const { user } = useAuth()
+  return user.role === ROLES.DRIVER ? <DriverHistoryPage /> : <PassengerHistoryPage />
+}
+const passenger = (page) => <RoleRoute role={ROLES.PASSENGER}>{page}</RoleRoute>
+const driver = (page) => <RoleRoute role={ROLES.DRIVER}>{page}</RoleRoute>
+
 export default function AppRoutes() {
   return (
     <Routes>
@@ -61,159 +51,25 @@ export default function AppRoutes() {
         }
       />
       <Route
-        path="/request"
         element={
           <ProtectedRoute>
-            <RoleRoute role={ROLES.PASSENGER}>
-              <AppShell>
-                <RequestRidePage />
-              </AppShell>
-            </RoleRoute>
+            <AppShell />
           </ProtectedRoute>
         }
-      />
-      <Route
-        path="/my-rides"
-        element={
-          <ProtectedRoute>
-            <RoleRoute role={ROLES.PASSENGER}>
-              <AppShell>
-                <MyRidesPage />
-              </AppShell>
-            </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/my-rides/:rideId"
-        element={
-          <ProtectedRoute>
-            <RoleRoute role={ROLES.PASSENGER}>
-              <AppShell>
-                <RideDetailPage />
-              </AppShell>
-            </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/passenger"
-        element={
-          <ProtectedRoute>
-            <RoleRoute role={ROLES.PASSENGER}>
-              <AppShell>
-                <PassengerHome />
-              </AppShell>
-            </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/join-pool"
-        element={
-          <ProtectedRoute>
-            <RoleRoute role={ROLES.PASSENGER}>
-              <AppShell>
-                <JoinPoolPage />
-              </AppShell>
-            </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/payments"
-        element={
-          <ProtectedRoute>
-            <RoleRoute role={ROLES.PASSENGER}>
-              <AppShell>
-                <PaymentsPage />
-              </AppShell>
-            </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/history"
-        element={
-          <ProtectedRoute>
-            <RoleRoute role={ROLES.PASSENGER}>
-              <AppShell>
-                <PassengerHistoryPage />
-              </AppShell>
-            </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/tesla"
-        element={
-          <ProtectedRoute>
-            <RoleRoute role={ROLES.DRIVER}>
-              <AppShell>
-                <MyTeslaPage />
-              </AppShell>
-            </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/requests"
-        element={
-          <ProtectedRoute>
-            <RoleRoute role={ROLES.DRIVER}>
-              <AppShell>
-                <RequestsPage />
-              </AppShell>
-            </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/active-trip"
-        element={
-          <ProtectedRoute>
-            <RoleRoute role={ROLES.DRIVER}>
-              <AppShell>
-                <ActiveTripPage />
-              </AppShell>
-            </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/history"
-        element={
-          <ProtectedRoute>
-            <RoleRoute role={ROLES.DRIVER}>
-              <AppShell>
-                <DriverHistoryPage />
-              </AppShell>
-            </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/driver"
-        element={
-          <ProtectedRoute>
-            <RoleRoute role={ROLES.DRIVER}>
-              <AppShell>
-                <DriverHome />
-              </AppShell>
-            </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/profile"
-        element={
-          <ProtectedRoute>
-            <AppShell>
-              <ProfilePage />
-            </AppShell>
-          </ProtectedRoute>
-        }
-      />
+      >
+        <Route path="/passenger" element={passenger(<PassengerHome />)} />
+        <Route path="/request" element={passenger(<RequestRidePage />)} />
+        <Route path="/my-rides" element={passenger(<MyRidesPage />)} />
+        <Route path="/my-rides/:rideId" element={passenger(<RideDetailPage />)} />
+        <Route path="/join-pool" element={passenger(<JoinPoolPage />)} />
+        <Route path="/payments" element={passenger(<PaymentsPage />)} />
+        <Route path="/driver" element={driver(<DriverHome />)} />
+        <Route path="/tesla" element={driver(<MyTeslaPage />)} />
+        <Route path="/requests" element={driver(<RequestsPage />)} />
+        <Route path="/active-trip" element={driver(<ActiveTripPage />)} />
+        <Route path="/history" element={<HistoryPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+      </Route>
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   )

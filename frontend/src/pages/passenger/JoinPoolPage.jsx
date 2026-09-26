@@ -1,175 +1,164 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-
-import { Alert, Button, Card, Input, PageHeader, Select } from '@/components/ui'
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Icon,
+  Input,
+  LinkButton,
+  PageHeader,
+  Select,
+  Spinner,
+} from '@/components/ui'
+import FareBreakdown from '@/components/ride/FareBreakdown'
+import useApi from '@/hooks/useApi'
 import rideService from '@/services/ride.service'
 import poolService from '@/services/pool.service'
 
-// A passenger joins a pool the driver has already created. There is no public
-// pool directory — the driver must share the pool ID. The page takes the pool
-// ID in a text input, and lets the passenger pick ONE of their own REQUESTED
-// rides to add to it. On submit, POST /pool/:poolId/add-passenger with the
-// chosen rideId, then refresh the driver's manifest and check the fare dropped.
-//
-// The ride-ID dropdown lists only the passenger's own rides that are still
-// REQUESTED; completed, ongoing or matched rides are not eligible. If no such
-// rides exist, the page shows a helpful note and a link to request a new ride.
-
 export default function JoinPoolPage() {
+  const { data: rides, loading, error, reload } = useApi(rideService.getMyRides, [])
   const [poolId, setPoolId] = useState('')
-  const [poolIdError, setPoolIdError] = useState(null)
   const [rideId, setRideId] = useState('')
-  const [rideIdError, setRideIdError] = useState(null)
-  const [rideOptions, setRideOptions] = useState([])
-  const [loadingRides, setLoadingRides] = useState(false)
+  const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [joinError, setJoinError] = useState(null)
-  const [joinSuccess, setJoinSuccess] = useState(false)
-
-  // Refresh the rider's own requested rides (the ones they can join a pool with).
-  async function refreshRides() {
-    setLoadingRides(true)
-    setRideOptions([])
+  const [result, setResult] = useState(null)
+  const options = (rides ?? [])
+    .filter((r) => r.status === 'REQUESTED')
+    .map((r) => ({
+      value: String(r.id),
+      label: '#' + r.id + ' · ' + r.pickup_location + ' → ' + r.destination_location,
+    }))
+  async function handleSubmit(event) {
+    event.preventDefault()
+    const next = {}
+    if (!Number.isInteger(Number(poolId)) || Number(poolId) < 1)
+      next.poolId = 'Enter a valid pool number from your driver'
+    if (!options.some((o) => o.value === rideId)) next.rideId = 'Choose one of your waiting rides'
+    setErrors(next)
+    if (Object.keys(next).length) return
+    setSubmitting(true)
+    setJoinError(null)
     try {
-      const result = await rideService.getMyRides()
-      const requested = (result.data || [])
-        .filter((r) => r.status === 'REQUESTED')
-        .map((r) => ({ value: String(r.id), label: `Ride #${r.id}: ${r.pickup_location} → ${r.destination_location} (${r.seats_requested} seats)` }))
-      setRideOptions(requested)
+      setResult(await poolService.addPassenger(Number(poolId), Number(rideId)))
     } catch (err) {
       setJoinError(err.message)
     } finally {
-      setLoadingRides(false)
-    }
-  }
-
-  // Submit the join-pool form.
-  async function handleSubmit(event) {
-    event.preventDefault()
-    setSubmitting(true)
-    setJoinError(null)
-    setJoinSuccess(false)
-
-    // Validation: pool ID and a ride must be chosen.
-    if (!poolId) {
-      setPoolIdError('Enter the pool ID')
-    } else {
-      setPoolIdError(null)
-    }
-    if (!rideId) {
-      setRideIdError('Choose a ride')
-    } else {
-      setRideIdError(null)
-    }
-    if (poolIdError || rideIdError) {
-      setSubmitting(false)
-      return
-    }
-
-    try {
-      await poolService.addPassenger(poolId, Number(rideId))
-      setJoinSuccess(true)
-      // Reload the driver's manifest and the rider's own ride list so the new
-      // passenger appears and the fare is recomputed.
-      refreshRides()
-    } catch (err) {
-      // The backend returns many reasons: 404 pool not found, 403 not the
-      // owner, 409 NO_SEAT_AVAILABLE (pool filled up), 400 ride not REQUESTED.
-      setJoinError(err.message || 'Could not join this pool')
-    } finally {
       setSubmitting(false)
     }
   }
-
-  // If we just joined successfully, show a summary then reset.
-  if (joinSuccess) {
-    return (
-      <Card className="mt-6 border-emerald-200">
-        <h2 className="text-lg font-semibold text-slate-900">Joined the pool</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Your ride has been added. The driver's manifest now shows the extra
-          passenger and the fare has been recalculated with the shared-trip discount.
-        </p>
-        <Button size="sm" variant="secondary" onClick={() => {
-          setJoinSuccess(false)
-          setPoolId('')
-          setRideId('')
-          setPoolIdError(null)
-          setRideIdError(null)
-        }}>
-          OK
-        </Button>
-      </Card>
-    )
-  }
-
   return (
     <>
       <PageHeader
-        title="Join a pool"
-        description="The driver has a pool — enter the pool ID and choose one of your requested rides to join."
+        title="There’s room for together."
+        description="Join a driver’s existing pool with a ride you’ve already requested."
+        eyebrow="SHARE THE JOURNEY"
       />
-
-      {joinError && (
-        <div className="mt-6 max-w-md">
-          <Alert tone="error">{joinError}</Alert>
-        </div>
-      )}
-
-      <Card className="mt-6">
-        <form className="p-6 space-y-4" onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label htmlFor="pool-id" className="block text-sm font-medium text-slate-700 mb-1">
-              Pool ID
-            </label>
-            <Input
-              id="pool-id"
-              type="text"
-              value={poolId}
-              onChange={(event) => setPoolId(event.target.value)}
-              placeholder="e.g. 6"
-              error={poolIdError}
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              The driver should share this with you. There is no public pool directory.
+      {result ? (
+        <Card className="mt-8 max-w-xl">
+          <Alert tone="success">You’ve joined the pool. Your shared journey is confirmed.</Alert>
+          <div className="my-6 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-brand-900">Ride #{result.ride.id}</h2>
+            <Badge status={result.ride.status} />
+          </div>
+          <FareBreakdown breakdown={result.fareBreakdown} />
+          <LinkButton className="mt-6" to={'/my-rides/' + result.ride.id}>
+            View your ride <Icon name="arrow" />
+          </LinkButton>
+        </Card>
+      ) : (
+        <div className="mt-8 grid items-start gap-6 xl:grid-cols-[1.3fr_1fr]">
+          <Card>
+            <h2 className="text-lg font-bold text-brand-900">Join an existing pool</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Ask your driver for their pool number, then select the ride you want to share.
+            </p>
+            {joinError && (
+              <Alert className="mt-5" tone="error">
+                {joinError}
+              </Alert>
+            )}
+            {loading ? (
+              <div className="py-12">
+                <Spinner label="Loading your waiting rides" />
+              </div>
+            ) : error ? (
+              <div className="mt-6">
+                <Alert tone="error">{error.message}</Alert>
+                <Button className="mt-3" variant="secondary" onClick={reload}>
+                  Try again
+                </Button>
+              </div>
+            ) : !options.length ? (
+              <EmptyState
+                className="mt-6"
+                title="You’ll need a waiting ride"
+                description="Request your pickup and destination first. A ride that already has a driver cannot join another pool."
+              >
+                <LinkButton to="/request">
+                  Request a ride <Icon name="arrow" />
+                </LinkButton>
+              </EmptyState>
+            ) : (
+              <form className="mt-6" noValidate onSubmit={handleSubmit}>
+                <fieldset disabled={submitting} className="space-y-6">
+                  <Input
+                    label="Pool number"
+                    type="number"
+                    min="1"
+                    step="1"
+                    inputMode="numeric"
+                    placeholder="Enter the number from your driver"
+                    value={poolId}
+                    onChange={(e) => setPoolId(e.target.value)}
+                    error={errors.poolId}
+                    required
+                  />
+                  <Select
+                    label="Your waiting ride"
+                    placeholder="Choose a ride"
+                    options={options}
+                    value={rideId}
+                    onChange={(e) => setRideId(e.target.value)}
+                    error={errors.rideId}
+                    required
+                  />
+                  <Button type="submit" full loading={submitting}>
+                    Join this pool <Icon name="users" />
+                  </Button>
+                </fieldset>
+              </form>
+            )}
+          </Card>
+          <div className="rounded-2xl bg-brand-50 p-7">
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-brand-600">
+              <Icon name="users" />
+            </span>
+            <h2 className="mt-5 text-xl font-bold text-brand-900">
+              Same direction. Shared journey.
+            </h2>
+            <ol className="mt-5 space-y-5">
+              {[
+                'Request a ride with your pickup and destination.',
+                'Get the active pool number from your driver.',
+                'Join the pool and see your fare breakdown.',
+              ].map((text, i) => (
+                <li key={text} className="flex gap-3 text-sm leading-6 text-brand-800">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold">
+                    {i + 1}
+                  </span>
+                  {text}
+                </li>
+              ))}
+            </ol>
+            <p className="mt-6 border-t border-brand-100 pt-5 text-xs leading-6 text-brand-600">
+              Joining depends on available seats and whether your stops fit the route.
             </p>
           </div>
-
-          <div className="mb-4">
-            <label htmlFor="ride-select" className="block text-sm font-medium text-slate-700 mb-1">
-              Your ride to join
-            </label>
-            <Select
-              id="ride-select"
-              label="Your ride"
-              placeholder="Select a ride"
-              options={rideOptions}
-              value={rideId}
-              onChange={(event) => setRideId(event.target.value)}
-              error={rideIdError}
-              disabled={loadingRides}
-            />
-            {loadingRides && (
-              <div className="mt-2 text-sm text-slate-500">Loading your rides…</div>
-            )}
-            {(!rideOptions || rideOptions.length === 0) && !loadingRides && (
-              <p className="mt-2 text-sm text-slate-500">
-                You have no requested rides — <Link to="/request">request a ride</Link> first.
-              </p>
-            )}
-          </div>
-
-          <Button type="submit" full loading={submitting}>
-            {submitting ? 'Joining…' : 'Join this pool'}
-          </Button>
-        </form>
-      </Card>
-
-      {joinSuccess && <></>}
-
-      {/* If the passenger already joined and the page was reloaded, we render
-          the summary here instead of the form. The submit handler above also
-          navigates back to the driver's active trip. */}
+        </div>
+      )}
     </>
   )
 }

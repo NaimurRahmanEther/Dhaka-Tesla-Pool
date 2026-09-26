@@ -5,7 +5,7 @@ import useAuth from '@/hooks/useAuth'
 
 // Requires a signed-in user. The two branches matter:
 //   - checking: the session is still being restored on a hard refresh (the
-//     token is in localStorage but /users/me has not answered yet). A guard
+//     access token is in memory and /users/me has not answered yet). A guard
 //     that checks `user` without checking `checking` first would bounce a
 //     signed-in user back to /login on every refresh.
 //   - no user: send them to /login.

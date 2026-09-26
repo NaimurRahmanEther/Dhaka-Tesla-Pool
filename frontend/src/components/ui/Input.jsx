@@ -18,9 +18,7 @@ export default function Input({ label, hint, error, id, className = '', ...rest 
         id={inputId}
         aria-invalid={error ? true : undefined}
         aria-describedby={[hintId, errorId].filter(Boolean).join(' ') || undefined}
-        className={`mt-1.5 block w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
-          error ? 'border-red-400 focus:ring-red-200' : 'border-slate-300 focus:ring-slate-200'
-        }`}
+        className={`field mt-2 ${error ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : ''}`}
         {...rest}
       />
       {hint && !error && (

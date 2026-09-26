@@ -12,7 +12,7 @@ export default function Spinner({ size = 'md', label = 'Loading…', className =
     <div role="status" className={`flex items-center justify-center ${className}`}>
       <span
         aria-hidden="true"
-        className={`inline-block animate-spin rounded-full border-slate-300 border-t-slate-900 ${SIZES[size]}`}
+        className={`inline-block animate-spin rounded-full border-current border-t-transparent opacity-70 ${SIZES[size]}`}
       />
       <span className="sr-only">{label}</span>
     </div>

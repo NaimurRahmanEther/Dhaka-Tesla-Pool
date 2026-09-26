@@ -1,35 +1,45 @@
 import { fareRows, formatTaka } from '@/lib/format'
+import { Icon } from '@/components/ui'
 
-// The one component that turns the server's rides.fare_breakdown JSONB into
-// screen rows. It reads the line items - base fare, distance charge, pool
-// discount, total - and renders them exactly as the backend wrote them. It
-// never adds, subtracts or recomputes a number; the breakdown IS the source of
-// truth (there is no fare endpoint in this backend).
-//
-// A ride that has not been matched yet has no breakdown (fare_breakdown is
-// NULL), so this renders nothing and the page shows its own "fare comes after
-// matching" note.
+// All line items come from the server; the browser never recalculates fares.
 export default function FareBreakdown({ breakdown }) {
   const rows = fareRows(breakdown)
   if (!rows.length) return null
-
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200">
-      {rows.map((row) =>
-        row.total ? (
+    <div className="overflow-hidden rounded-xl border border-brand-100">
+      <dl>
+        {rows.map((row) => (
           <div
             key={row.label}
-            className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3"
+            className={
+              'flex items-center justify-between gap-4 px-5 ' +
+              (row.total ? 'bg-brand-900 py-4 text-white' : 'bg-white py-3 text-sm')
+            }
           >
-            <span className="text-sm font-semibold text-slate-900">{row.label}</span>
-            <span className="text-sm font-bold text-slate-900">{formatTaka(row.amount)} BDT</span>
+            <dt className={row.total ? 'text-sm font-medium text-white/70' : 'text-slate-500'}>
+              {row.label}
+            </dt>
+            <dd className={row.total ? 'text-xl font-bold' : 'font-semibold text-slate-800'}>
+              {row.label === 'Pool discount' ? '−' : ''}
+              {formatTaka(row.amount)}{' '}
+              <span
+                className={
+                  row.total
+                    ? 'text-xs font-normal text-white/50'
+                    : 'text-[10px] font-normal text-slate-500'
+                }
+              >
+                BDT
+              </span>
+            </dd>
           </div>
-        ) : (
-          <div key={row.label} className="flex items-center justify-between bg-white px-4 py-2.5">
-            <span className="text-sm text-slate-600">{row.label}</span>
-            <span className="text-sm font-medium text-slate-900">{formatTaka(row.amount)} BDT</span>
-          </div>
-        ),
+        ))}
+      </dl>
+      {breakdown.isPool && (
+        <p className="flex items-center gap-2 bg-brand-50 px-5 py-3 text-xs font-medium text-brand-700">
+          <Icon name="users" className="h-4 w-4" />
+          Your shared-trip discount is included.
+        </p>
       )}
     </div>
   )

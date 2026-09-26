@@ -1,213 +1,263 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-
 import PassengerManifest from '@/components/driver/PassengerManifest'
-import { Alert, Badge, Button, Card, EmptyState, PageHeader, Spinner } from '@/components/ui'
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Icon,
+  LinkButton,
+  PageHeader,
+  Spinner,
+} from '@/components/ui'
 import useApi from '@/hooks/useApi'
-import { RIDE_STATUS } from '@/lib/constants'
+import usePolling from '@/hooks/usePolling'
 import poolService from '@/services/pool.service'
 import tripService from '@/services/trip.service'
 
-// The forward-only lifecycle a driver walks: MATCHED -> DRIVER_ARRIVED ->
-// ONGOING -> COMPLETED, plus the passenger manifest for the current pool.
-//
-// GET /trips/my-active returns one row per rider in the pool (pool_id, vehicle,
-// passenger, ride_status) or a 404 when there is no trip — that 404 is the
-// empty state here. The poolId for every action and for the manifest comes from
-// that response; it is never guessed.
-const STEPS = [
-  { key: 'arrive', verb: 'Mark arrived', hint: 'You have reached the pickup point' },
-  { key: 'start', verb: 'Start trip', hint: 'All riders are in the car' },
-  { key: 'complete', verb: 'Complete trip', hint: 'Finish and settle every fare' },
+const steps = [
+  {
+    key: 'arrive',
+    title: 'Arrive at pickup',
+    hint: 'Let your passengers know you’re at the pickup point.',
+    label: 'Mark as arrived',
+  },
+  {
+    key: 'start',
+    title: 'Everyone on board',
+    hint: 'Start the trip once your passengers are in the car.',
+    label: 'Start trip',
+  },
+  {
+    key: 'complete',
+    title: 'You’ve arrived',
+    hint: 'Complete the trip once your passengers reach their destinations.',
+    label: 'Complete trip',
+  },
 ]
-
-const STEP_INDEX = {
-  [RIDE_STATUS.MATCHED]: 0,
-  [RIDE_STATUS.DRIVER_ARRIVED]: 1,
-  [RIDE_STATUS.ONGOING]: 2,
-}
-
-const ACTION_CALLS = {
+const indexes = { MATCHED: 0, DRIVER_ARRIVED: 1, ONGOING: 2 }
+const calls = {
   arrive: tripService.arrive,
   start: tripService.start,
   complete: tripService.complete,
 }
 
 export default function ActiveTripPage() {
-  const {
-    data: tripRows,
-    loading: tripLoading,
-    error: tripError,
-    reload: reloadTrip,
-  } = useApi(() => tripService.getMyActiveTrip(), [])
-
-  const [busyAction, setBusyAction] = useState(null)
+  const trip = useApi(tripService.getMyActiveTrip, [])
+  const [busy, setBusy] = useState(null)
   const [notice, setNotice] = useState(null)
-  const [actionError, setActionError] = useState(null)
-  const [tripEnded, setTripEnded] = useState(false)
-
-  const noTrip = tripError?.status === 404
-
-  // Every rider row shares the pool and the ride status, so the first row is
-  // the trip's source of truth.
-  const poolId = tripRows?.[0]?.pool_id
-  const currentStep = tripRows?.[0] ? STEP_INDEX[tripRows[0].ride_status] : -1
-
-  const {
-    data: manifest,
-    loading: manifestLoading,
-    error: manifestError,
-  } = useApi(
+  const [error, setError] = useState(null)
+  const [ended, setEnded] = useState(false)
+  const [confirm, setConfirm] = useState(false)
+  const rows = trip.data ?? []
+  const poolId = rows[0]?.pool_id
+  const manifest = useApi(
     () => (poolId ? poolService.getPoolPassengers(poolId) : Promise.resolve(null)),
     [poolId],
   )
-
-  async function runAction(stepKey) {
-    if (!poolId) return
-
-    setBusyAction(stepKey)
+  const current = rows.length ? Math.min(...rows.map((r) => indexes[r.ride_status] ?? 3)) : -1
+  const refresh = (options) => {
+    trip.reload(options)
+    manifest.reload(options)
+  }
+  usePolling(refresh, Boolean(poolId && !ended && !busy))
+  async function act(key) {
+    setBusy(key)
+    setError(null)
     setNotice(null)
-    setActionError(null)
-
     try {
-      await ACTION_CALLS[stepKey](poolId)
-
-      if (stepKey === 'complete') {
-        // The pool closes, so the active-trip endpoint 404s afterwards. The
-        // ended panel replaces the trip card instead of the empty state.
-        setTripEnded(true)
-      } else {
+      await calls[key](poolId)
+      if (key === 'complete') {
+        setEnded(true)
+        setConfirm(false)
+      } else
         setNotice(
-          stepKey === 'arrive'
-            ? 'Marked as arrived — waiting for the riders to get in.'
-            : 'Trip started — enjoy the drive.',
+          key === 'arrive'
+            ? 'Your passengers can see that you’ve arrived.'
+            : 'Your trip is underway. Have a good journey.',
         )
-      }
-      reloadTrip()
+      refresh()
     } catch (err) {
-      // A 409 here means the lifecycle rejected the action (e.g. start before
-      // arrive) — surface the backend's reason, nothing has changed.
-      setActionError(err.message)
+      setError(err.message)
+      refresh()
     } finally {
-      setBusyAction(null)
+      setBusy(null)
     }
   }
-
-  if (tripLoading && tripRows === null) {
-    return (
-      <div className="flex justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    )
-  }
-
   return (
     <>
       <PageHeader
-        title="Active trip"
-        description="Drive your riders through the trip — the manifest follows the lifecycle."
-      />
-
-      {tripEnded && (
-        <Card className="mt-6 border-emerald-200">
-          <h2 className="text-lg font-semibold text-slate-900">Trip completed</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Every rider&apos;s fare has been settled and this trip is no longer active.
-          </p>
-        </Card>
-      )}
-
-      {!tripEnded && noTrip && (
-        <div className="mt-8">
-          <EmptyState
-            title="No active trip"
-            description="When you accept a request on the board, the trip and its passengers appear here."
+        title="Make it a good journey."
+        description="Your passengers, your stops, and the next step along the way."
+        eyebrow="ACTIVE TRIP"
+      >
+        {!ended && (
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={trip.loading}
+            disabled={busy !== null}
+            onClick={() => refresh()}
           >
-            <Link
-              to="/requests"
-              className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-            >
-              Open request board
-            </Link>
-          </EmptyState>
-        </div>
-      )}
-
-      {tripError && !noTrip && !tripEnded && (
-        <div className="mt-8 max-w-md">
-          <Alert tone="error">{tripError.message}</Alert>
-          <Button className="mt-4" onClick={reloadTrip}>
-            Try again
+            <Icon name="refresh" className="h-4 w-4" />
+            Refresh
           </Button>
-        </div>
-      )}
-
-      {tripRows && !tripEnded && (
-        <Card className="mt-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">{tripRows[0].model}</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                {tripRows.length} rider{tripRows.length > 1 ? 's' : ''} in the pool · pool #{poolId}
-              </p>
-            </div>
-            <Badge status={tripRows[0].ride_status} />
-          </div>
-
-          {notice && (
-            <div className="mt-6">
-              <Alert tone="info">{notice}</Alert>
-            </div>
-          )}
-
-          {actionError && (
-            <div className="mt-6">
-              <Alert tone="error">{actionError}</Alert>
-            </div>
-          )}
-
-          <div className="mt-6 border-t border-slate-100 pt-6">
-            <h3 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">Trip progress</h3>
-            <div className="mt-4 space-y-3">
-              {STEPS.map((step, index) => {
-                const done = currentStep > index
-                const active = currentStep === index
-                return (
-                  <div
-                    key={step.key}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 px-4 py-3"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">
-                        {index + 1}. {step.verb}
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-500">{step.hint}</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant={active ? 'primary' : 'secondary'}
-                      loading={busyAction === step.key}
-                      disabled={!active || busyAction !== null}
-                      onClick={() => runAction(step.key)}
-                    >
-                      {done ? 'Done' : step.verb}
-                    </Button>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="mt-6 border-t border-slate-100 pt-6">
-            {manifest && <PassengerManifest manifest={manifest} />}
-            {poolId && manifestLoading && manifest === null && (
-              <div className="flex justify-center py-6">
-                <Spinner />
-              </div>
-            )}
-            {poolId && manifestError && <Alert tone="error">{manifestError.message}</Alert>}
+        )}
+      </PageHeader>
+      {ended ? (
+        <Card className="mt-8">
+          <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+            <Icon name="check" className="h-8 w-8" />
+          </span>
+          <h2 className="mt-5 text-2xl font-bold text-brand-900">Another journey, well shared.</h2>
+          <p className="mt-3 max-w-lg text-sm leading-6 text-slate-500">
+            Your trip is complete. Passengers can now pay their fares from the Payments page.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <LinkButton to="/requests">
+              Find your next ride <Icon name="arrow" />
+            </LinkButton>
+            <LinkButton variant="secondary" to="/history">
+              View trip history
+            </LinkButton>
           </div>
         </Card>
+      ) : trip.loading && trip.data === null ? (
+        <div className="py-20">
+          <Spinner label="Loading active trip" />
+        </div>
+      ) : trip.error?.status === 404 || (!trip.error && !rows.length) ? (
+        <EmptyState
+          className="mt-8"
+          icon="car"
+          title="Ready for your next journey"
+          description="Accept a passenger request to start a new trip. Your passengers and trip controls will appear here."
+        >
+          <LinkButton to="/requests">
+            Find ride requests <Icon name="arrow" />
+          </LinkButton>
+        </EmptyState>
+      ) : trip.error ? (
+        <Alert tone="error" className="mt-8">
+          {trip.error.message}
+        </Alert>
+      ) : (
+        <>
+          {notice && (
+            <Alert tone="success" className="mt-6">
+              {notice}
+            </Alert>
+          )}
+          {error && (
+            <Alert tone="error" className="mt-6">
+              {error}
+            </Alert>
+          )}
+          <Card className="mt-8">
+            <div className="flex flex-wrap items-center justify-between gap-5">
+              <div className="flex items-center gap-4">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
+                  <Icon name="car" className="h-7 w-7" />
+                </span>
+                <div>
+                  <h2 className="text-xl font-bold text-brand-900">{rows[0].model}</h2>
+                  <p className="mt-1 text-sm text-slate-500">{rows.length} ride(s) in this trip</p>
+                </div>
+              </div>
+              <div className="rounded-xl bg-canvas px-5 py-3">
+                <p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">
+                  Share with passengers
+                </p>
+                <p className="mt-1 text-lg font-bold text-brand-900">Pool #{poolId}</p>
+              </div>
+            </div>
+          </Card>
+          <div className="mt-6 grid items-start gap-6 xl:grid-cols-[1fr_1.25fr]">
+            <Card>
+              <h2 className="mb-6 text-lg font-bold text-brand-900">Next stop, the next step.</h2>
+              <ol className="space-y-5">
+                {steps.map((step, i) => (
+                  <li
+                    key={step.key}
+                    className={
+                      'rounded-xl border p-4 ' +
+                      (current === i ? 'border-brand-100 bg-brand-50' : 'border-slate-100')
+                    }
+                  >
+                    <div className="flex items-start gap-3">
+                      <span
+                        className={
+                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ' +
+                          (current >= i
+                            ? 'bg-brand-800 text-lime-300'
+                            : 'bg-slate-100 text-slate-500')
+                        }
+                      >
+                        {current > i ? <Icon name="check" className="h-4 w-4" /> : i + 1}
+                      </span>
+                      <div>
+                        <h3 className="text-sm font-semibold text-brand-900">{step.title}</h3>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">{step.hint}</p>
+                      </div>
+                    </div>
+                    {current === i && (
+                      <div className="mt-4">
+                        {step.key === 'complete' && confirm ? (
+                          <>
+                            <p className="mb-3 text-sm text-brand-800">
+                              Have all passengers reached their destination? Completing closes this
+                              pool.
+                            </p>
+                            <Button loading={busy === step.key} onClick={() => act(step.key)}>
+                              Yes, complete trip
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              className="mt-2"
+                              disabled={busy !== null}
+                              onClick={() => setConfirm(false)}
+                            >
+                              Keep trip open
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            full
+                            loading={busy === step.key}
+                            disabled={busy !== null}
+                            onClick={() =>
+                              step.key === 'complete' ? setConfirm(true) : act(step.key)
+                            }
+                          >
+                            {step.label}
+                            <Icon name="arrow" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </Card>
+            <Card>
+              {manifest.error ? (
+                <Alert tone="error">{manifest.error.message}</Alert>
+              ) : manifest.data ? (
+                <PassengerManifest manifest={manifest.data} />
+              ) : (
+                <Spinner label="Loading passenger manifest" />
+              )}
+              <div className="mt-6 border-t border-slate-100 pt-5">
+                <Badge status="ACTIVE" />
+                <p className="mt-3 text-xs leading-5 text-slate-500">
+                  Passenger details refresh automatically. Share the pool number with riders who
+                  want to join.
+                </p>
+              </div>
+            </Card>
+          </div>
+        </>
       )}
     </>
   )

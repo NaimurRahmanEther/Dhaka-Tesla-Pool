@@ -1,350 +1,294 @@
 import { useState } from 'react'
-
-import { Alert, Badge, Button, Card, Input, PageHeader, Select, Spinner } from '@/components/ui'
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Icon,
+  Input,
+  LinkButton,
+  PageHeader,
+  Select,
+  Spinner,
+} from '@/components/ui'
+import RouteSummary from '@/components/ride/RouteSummary'
 import useApi from '@/hooks/useApi'
 import { formatDateTime } from '@/lib/format'
-import { VEHICLE_STATUS } from '@/lib/constants'
 import locationService from '@/services/location.service'
 import routeService from '@/services/route.service'
 import vehicleService from '@/services/vehicle.service'
 
-// Everything a driver must sort out before they can serve rides: register the
-// Tesla, decide whether they are ONLINE, and plan the destination they are
-// heading to.
-//
-// The 404s are the interesting part. GET /vehicle/me and GET /driver-routes/me
-// both return 404 when there is nothing yet — the page shows a form for each
-// instead of an error banner.
 export default function MyTeslaPage() {
-  const {
-    data: locations,
-    loading: locationsLoading,
-    error: locationsError,
-    reload: reloadLocations,
-  } = useApi(() => locationService.getAll(), [])
-
-  const {
-    data: vehicle,
-    loading: vehicleLoading,
-    error: vehicleError,
-    reload: reloadVehicle,
-  } = useApi(() => vehicleService.getMyVehicle(), [])
-
-  const {
-    data: route,
-    loading: routeLoading,
-    error: routeError,
-    reload: reloadRoute,
-  } = useApi(() => routeService.getMyRoute(), [])
-
-  // Registration form
+  const locations = useApi(locationService.getAll, [])
+  const vehicle = useApi(vehicleService.getMyVehicle, [])
+  const route = useApi(routeService.getMyRoute, [])
   const [model, setModel] = useState('')
   const [capacity, setCapacity] = useState('')
   const [currentLocation, setCurrentLocation] = useState('')
-  const [formErrors, setFormErrors] = useState({})
-  const [formError, setFormError] = useState(null)
-  const [registering, setRegistering] = useState(false)
-
-  // Destination planning
   const [destination, setDestination] = useState('')
-  const [destinationError, setDestinationError] = useState(null)
-  const [planning, setPlanning] = useState(false)
-  const [planningVisible, setPlanningVisible] = useState(false)
-
-  // Status toggle
-  const [toggling, setToggling] = useState(false)
-  const [toggleError, setToggleError] = useState(null)
-
-  const noVehicle = vehicleError?.status === 404
-  const noRoute = routeError?.status === 404
-
-  const isOnline = vehicle?.status === VEHICLE_STATUS.ONLINE
-
-  const locationOptions = (locations ?? []).map((location) => ({
-    value: String(location.id),
-    label: location.name,
-  }))
-
-  function locationName(id) {
-    const location = (locations ?? []).find((item) => item.id === Number(id))
-    return location ? location.name : ''
-  }
-
-  function vehicleErrorBanner() {
-    return (
-      <>
-        <div className="mt-8 max-w-md">
-          <Alert tone="error">{vehicleError.message}</Alert>
-          <Button className="mt-4" onClick={reloadVehicle}>
-            Try again
-          </Button>
-        </div>
-      </>
-    )
-  }
-
-  async function handleRegister(event) {
+  const [errors, setErrors] = useState({})
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(null)
+  const [notice, setNotice] = useState(null)
+  const options = (locations.data ?? []).map((l) => ({ value: String(l.id), label: l.name }))
+  const nameFor = (id) => locations.data?.find((l) => l.id === id)?.name
+  const noVehicle = vehicle.error?.status === 404
+  const online = vehicle.data?.status === 'ONLINE'
+  async function register(event) {
     event.preventDefault()
-
-    const nextErrors = {}
-    const requestedCapacity = Number(capacity)
-
-    if (model.trim().length < 2) nextErrors.model = 'Vehicle model required'
-    if (!capacity || !Number.isInteger(requestedCapacity) || requestedCapacity < 1) {
-      nextErrors.capacity = 'Capacity must be a positive whole number'
-    }
-    if (!currentLocation) nextErrors.currentLocation = "Choose the Tesla's current location"
-
-    setFormErrors(nextErrors)
-    if (Object.keys(nextErrors).length > 0) return
-
-    setRegistering(true)
-    setFormError(null)
-
+    const next = {}
+    if (model.trim().length < 2) next.model = 'Enter at least 2 characters'
+    if (!Number.isInteger(Number(capacity)) || Number(capacity) < 1)
+      next.capacity = 'Enter a positive seat capacity'
+    if (!currentLocation) next.location = 'Choose your current location'
+    setErrors(next)
+    if (Object.keys(next).length) return
+    setBusy('register')
+    setError(null)
     try {
-      // model is a string; capacity and currentLocationId must be JSON numbers.
       await vehicleService.createVehicle({
         model: model.trim(),
-        capacity: requestedCapacity,
+        capacity: Number(capacity),
         currentLocationId: Number(currentLocation),
       })
-      setModel('')
-      setCapacity('')
-      setCurrentLocation('')
-      reloadVehicle()
+      vehicle.reload()
+      setNotice('Your Tesla is registered. Go online when you’re ready.')
     } catch (err) {
-      setFormError(err.message)
+      setError(err.message)
     } finally {
-      setRegistering(false)
+      setBusy(null)
     }
   }
-
-  async function handleToggle() {
-    if (!vehicle) return
-
-    setToggling(true)
-    setToggleError(null)
-
+  async function toggle() {
+    setBusy('toggle')
+    setError(null)
+    setNotice(null)
     try {
-      await vehicleService.updateStatus(
-        isOnline ? VEHICLE_STATUS.OFFLINE : VEHICLE_STATUS.ONLINE,
-      )
-      reloadVehicle()
+      await vehicleService.updateStatus(online ? 'OFFLINE' : 'ONLINE')
+      vehicle.reload()
     } catch (err) {
-      setToggleError(err.message)
+      setError(err.message)
     } finally {
-      setToggling(false)
+      setBusy(null)
     }
   }
-
-  async function handlePlanDestination(event) {
+  async function plan(event) {
     event.preventDefault()
-
     if (!destination) {
-      setDestinationError('Choose a destination')
+      setErrors({ destination: 'Choose a destination' })
       return
     }
-    setDestinationError(null)
-
-    setPlanning(true)
-
+    setBusy('plan')
+    setError(null)
+    setErrors({})
+    setNotice(null)
     try {
       await routeService.createRoute(Number(destination))
+      route.reload()
       setDestination('')
-      setPlanningVisible(false)
-      reloadRoute()
+      setNotice('Your planned route has been updated.')
     } catch (err) {
-      setDestinationError(err.message)
+      setError(err.message)
     } finally {
-      setPlanning(false)
+      setBusy(null)
     }
   }
-
-  if (locationsLoading) {
-    return (
-      <div className="flex justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    )
-  }
-
-  if (locationsError) {
-    return (
-      <>
-        <PageHeader title="My Tesla" description="Register your car, go online and plan your route." />
-        <div className="mt-8 max-w-md">
-          <Alert tone="error">{locationsError.message}</Alert>
-          <Button className="mt-4" onClick={reloadLocations}>
+  const loading = locations.loading || vehicle.loading
+  const loadError = locations.error ?? (!noVehicle ? vehicle.error : null)
+  return (
+    <>
+      <PageHeader
+        title="Your Tesla, ready to go."
+        description="Set up your car, manage availability, and plan where you’re heading."
+        eyebrow="TAKE THE WHEEL"
+      />
+      {error && (
+        <Alert tone="error" className="mt-6">
+          {error}
+        </Alert>
+      )}
+      {notice && (
+        <Alert tone="success" className="mt-6">
+          {notice}
+        </Alert>
+      )}
+      {loading ? (
+        <div className="py-20">
+          <Spinner label="Loading your Tesla" />
+        </div>
+      ) : loadError ? (
+        <div className="mt-8">
+          <Alert tone="error">{loadError.message}</Alert>
+          <Button
+            className="mt-4"
+            variant="secondary"
+            onClick={() => {
+              locations.reload()
+              vehicle.reload()
+            }}
+          >
             Try again
           </Button>
         </div>
-      </>
-    )
-  }
-
-  if (vehicleLoading) {
-    return (
-      <div className="flex justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    )
-  }
-
-  // No Tesla yet — the 404 is the empty state the phase plan calls out.
-  if (noVehicle) {
-    return (
-      <>
-        <PageHeader title="My Tesla" description="Register your car, go online and plan your route." />
-
-        {formError && (
-          <div className="mt-6">
-            <Alert tone="error">{formError}</Alert>
-          </div>
-        )}
-
-        <Card className="mt-6 max-w-md">
-          <form className="space-y-5" noValidate onSubmit={handleRegister}>
-            <Input
-              id="tesla-model"
-              label="Model"
-              placeholder="e.g. Tesla Model 3"
-              value={model}
-              onChange={(event) => setModel(event.target.value)}
-              error={formErrors.model}
-            />
-            <Input
-              id="tesla-capacity"
-              label="Seat capacity"
-              type="number"
-              min="1"
-              inputMode="numeric"
-              value={capacity}
-              onChange={(event) => setCapacity(event.target.value)}
-              error={formErrors.capacity}
-            />
-            <Select
-              id="tesla-location"
-              label="Current location"
-              placeholder="Where is the Tesla now?"
-              options={locationOptions}
-              value={currentLocation}
-              onChange={(event) => setCurrentLocation(event.target.value)}
-              error={formErrors.currentLocation}
-            />
-
-            <Button type="submit" full loading={registering}>
-              Register my Tesla
-            </Button>
-          </form>
-        </Card>
-      </>
-    )
-  }
-
-  if (vehicleError) return vehicleErrorBanner()
-
-  const plannedDestinationOptions = locationOptions.filter(
-    (option) => option.value !== String(vehicle.current_location_id),
-  )
-
-  return (
-    <>
-      <PageHeader title="My Tesla" description="Register your car, go online and plan your route." />
-
-      {toggleError && (
-        <div className="mt-6">
-          <Alert tone="error">{toggleError}</Alert>
-        </div>
-      )}
-
-      <Card className="mt-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">{vehicle.model}</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              {vehicle.capacity} seats · currently in {locationName(vehicle.current_location_id)}
+      ) : !options.length ? (
+        <EmptyState
+          className="mt-8"
+          title="No locations available"
+          description="Check back when city stops are available to register your car."
+        />
+      ) : noVehicle ? (
+        <div className="mt-8 grid items-start gap-6 xl:grid-cols-[1.3fr_1fr]">
+          <Card>
+            <h2 className="text-xl font-bold text-brand-900">Meet your next shared journey.</h2>
+            <p className="mt-2 text-sm text-slate-500">First, tell us a little about your Tesla.</p>
+            <form className="mt-7" noValidate onSubmit={register}>
+              <fieldset disabled={busy !== null} className="space-y-6">
+                <Input
+                  label="Vehicle model or name"
+                  placeholder="e.g. Tesla Model 3"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  error={errors.model}
+                  required
+                />
+                <Input
+                  label="Passenger seat capacity"
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputMode="numeric"
+                  hint="The seats available for passengers."
+                  value={capacity}
+                  onChange={(e) => setCapacity(e.target.value)}
+                  error={errors.capacity}
+                  required
+                />
+                <Select
+                  label="Current location"
+                  placeholder="Where is your Tesla?"
+                  options={options}
+                  value={currentLocation}
+                  onChange={(e) => setCurrentLocation(e.target.value)}
+                  error={errors.location}
+                  required
+                />
+                <Button full type="submit" loading={busy === 'register'}>
+                  Register my Tesla <Icon name="arrow" />
+                </Button>
+              </fieldset>
+            </form>
+          </Card>
+          <div className="rounded-2xl bg-brand-50 p-7">
+            <Icon name="car" className="h-8 w-8 text-brand-600" />
+            <h2 className="mt-5 text-xl font-bold text-brand-900">Your car. Your schedule.</h2>
+            <p className="mt-3 text-sm leading-7 text-brand-700">
+              Register once, then go online whenever you’re ready. Choose the requests that suit
+              your available seats and route.
+            </p>
+            <p className="mt-5 border-t border-brand-100 pt-5 text-xs leading-6 text-brand-600">
+              Your Tesla starts offline, so you have time to get everything ready.
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Badge status={vehicle.status} />
-            <Button variant={isOnline ? 'secondary' : 'primary'} loading={toggling} onClick={handleToggle}>
-              {isOnline ? 'Go offline' : 'Go online'}
-            </Button>
-          </div>
         </div>
-
-        {!isOnline && (
-          <div className="mt-6">
-            <Alert tone="info">
-              When you go online, riders see you as available.
-              {route
-                ? null
-                : ' You have not planned a destination yet — matching works best when you have planned where you are heading.'}
-            </Alert>
-          </div>
-        )}
-
-        <div className="mt-6 border-t border-slate-100 pt-6">
-          {routeLoading && (
-            <div className="flex justify-center py-6">
-              <Spinner />
+      ) : (
+        <div className="mt-8 grid items-start gap-6 xl:grid-cols-[1fr_1.25fr]">
+          <Card>
+            <div className="flex items-start justify-between">
+              <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
+                <Icon name="car" className="h-9 w-9" />
+              </span>
+              <Badge status={vehicle.data.status} />
             </div>
-          )}
-
-          {route && !routeLoading && (
-            <div>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">Planned destination</h3>
-                  <p className="mt-1.5 text-sm font-medium text-slate-900">
-                    {locationName(route.start_location_id)} → {locationName(route.destination_location_id)}
-                  </p>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    {route.route.distance} km · planned {formatDateTime(route.created_at)}
-                  </p>
-                </div>
-                <Button variant="secondary" size="sm" onClick={() => setPlanningVisible(true)}>
-                  Change destination
-                </Button>
-              </div>
+            <h2 className="mt-6 break-words text-2xl font-bold text-brand-900">
+              {vehicle.data.model}
+            </h2>
+            <div className="mt-4 flex flex-wrap gap-4 text-sm text-slate-500">
+              <span className="flex items-center gap-2">
+                <Icon name="users" />
+                {vehicle.data.capacity} seats
+              </span>
+              <span className="flex items-center gap-2">
+                <Icon name="pin" />
+                {nameFor(vehicle.data.current_location_id)}
+              </span>
             </div>
-          )}
-
-          {(noRoute || planningVisible) && !routeLoading && (
-            <div className={route ? 'mt-6' : ''}>
-              <h3 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">
-                {noRoute ? 'Plan your destination' : 'Change destination'}
+            <div className="mt-7 border-t border-slate-100 pt-6">
+              <h3 className="font-semibold text-brand-900">
+                {online ? 'You’re available for rides.' : 'You’re taking a break.'}
               </h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Decide where you are driving so requests that fit your route can be suggested.
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                {online
+                  ? 'Browse waiting passengers and accept the rides that fit.'
+                  : 'Go online when you’re ready to accept passenger requests.'}
               </p>
-              {destinationError && (
-                <div className="mt-3">
-                  <Alert tone="error">{destinationError}</Alert>
-                </div>
+              <Button
+                full
+                className="mt-5"
+                variant={online ? 'secondary' : 'primary'}
+                loading={busy === 'toggle'}
+                disabled={busy !== null}
+                onClick={toggle}
+              >
+                {online ? 'Go offline' : 'Go online'}
+              </Button>
+              {online && (
+                <LinkButton to="/requests" className="mt-3 w-full">
+                  Find ride requests <Icon name="arrow" />
+                </LinkButton>
               )}
-              <form className="mt-4 flex flex-wrap items-end gap-3" noValidate onSubmit={handlePlanDestination}>
-                <Select
-                  id="route-destination"
-                  label="Destination"
-                  placeholder="Where are you driving?"
-                  options={plannedDestinationOptions}
-                  value={destination}
-                  onChange={(event) => setDestination(event.target.value)}
-                  className="w-full max-w-xs"
-                />
-                <Button type="submit" loading={planning}>
-                  Plan route
-                </Button>
-              </form>
             </div>
-          )}
-
-          {routeError && routeError.status !== 404 && (
-            <Alert tone="error">{routeError.message}</Alert>
-          )}
+          </Card>
+          <Card>
+            <h2 className="text-lg font-bold text-brand-900">Where are you heading?</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Save a planned route from your current location.
+            </p>
+            {route.loading ? (
+              <div className="py-8">
+                <Spinner label="Loading planned route" />
+              </div>
+            ) : route.error && route.error.status !== 404 ? (
+              <Alert className="mt-5" tone="error">
+                {route.error.message}
+              </Alert>
+            ) : route.data ? (
+              <div className="my-6 rounded-xl bg-canvas p-5">
+                <RouteSummary
+                  pickup={nameFor(route.data.start_location_id)}
+                  destination={nameFor(route.data.destination_location_id)}
+                />
+                <p className="mt-5 text-xs text-slate-500">
+                  {route.data.route.distance} km · Planned {formatDateTime(route.data.created_at)}
+                </p>
+              </div>
+            ) : (
+              <p className="my-6 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-700">
+                No route planned yet. Choose your destination below.
+              </p>
+            )}
+            <form className="mt-5" noValidate onSubmit={plan}>
+              <fieldset disabled={busy !== null} className="space-y-5">
+                <Select
+                  label={route.data ? 'New destination' : 'Destination'}
+                  placeholder="Choose a destination"
+                  options={options.filter(
+                    (o) => o.value !== String(vehicle.data.current_location_id),
+                  )}
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                  error={errors.destination}
+                  required
+                />
+                <Button type="submit" loading={busy === 'plan'}>
+                  <Icon name="route" />
+                  {route.data ? 'Update route' : 'Plan my route'}
+                </Button>
+              </fieldset>
+            </form>
+          </Card>
         </div>
-      </Card>
+      )}
     </>
   )
 }
