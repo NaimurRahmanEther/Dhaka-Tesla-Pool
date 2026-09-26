@@ -79,7 +79,7 @@ src/
 │   └── client.js      the only file in the app that calls fetch()
 │
 ├── lib/
-│   ├── constants.js   roles, ride statuses, payment methods, fare rules
+│   ├── constants.js   enum strings only: roles, ride statuses, payment methods
 │   └── format.js      Taka and date formatting
 │
 ├── hooks/
@@ -87,7 +87,8 @@ src/
 │   └── useAuth.js     reads the auth context
 │
 ├── context/
-│   └── AuthContext.jsx  the signed-in user and the auth actions
+│   ├── auth.context.js   the auth context object
+│   └── AuthProvider.jsx  the signed-in user, the auth actions, session restore
 │
 ├── routes/
 │   ├── AppRoutes.jsx        the one route table
@@ -213,3 +214,26 @@ Access tokens last 15 minutes. When a request comes back `401`, `client.js` call
 original request once. If that also fails it clears the session and the route
 guards redirect to the login page. One retry, no queue, no state machine — without
 it the app would break partway through a demo.
+
+## Authentication
+
+The session lives in `src/context/AuthProvider.jsx`, read anywhere in the tree
+with `useAuth()` from `src/hooks/useAuth.js`.
+
+- The **access token** sits in `localStorage`. The **refresh token** is an
+  httpOnly cookie set by the backend, which the app never sees.
+- On every change of the token — first load, login, logout — `AuthProvider`
+  calls `GET /users/me` to learn who the token belongs to. The `user` object in
+  context is therefore always the server's answer, never something stored
+  client-side and trusted on faith.
+- While that first check is running, `checking` is `true`; route guards wait on
+  it so a hard page refresh does not flash a logged-out screen to a logged-in
+  user.
+- `register` sends the account to the backend and stops. The backend deliberately
+  returns no token for a fresh registration, so the register page sends the user
+  to `/login` instead of pretending to have signed them in.
+
+The context object (`auth.context.js`) and the provider (`AuthProvider.jsx`) are
+separate files so that `react-refresh/only-export-components` stays satisfied,
+and their names were chosen to not collide case-insensitively on Windows, where
+`AuthContext.jsx` and `authContext.js` would be the same file.
