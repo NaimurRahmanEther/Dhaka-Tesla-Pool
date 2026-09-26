@@ -8,8 +8,10 @@ import ProfilePage from '@/pages/account/ProfilePage'
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import DriverHome from '@/pages/driver/DriverHome'
+import MyRidesPage from '@/pages/passenger/MyRidesPage'
 import PassengerHome from '@/pages/passenger/PassengerHome'
 import RequestRidePage from '@/pages/passenger/RequestRidePage'
+import RideDetailPage from '@/pages/passenger/RideDetailPage'
 import ProtectedRoute from '@/routes/ProtectedRoute'
 import PublicOnlyRoute from '@/routes/PublicOnlyRoute'
 import RoleRoute from '@/routes/RoleRoute'
@@ -25,10 +27,10 @@ import RoleRoute from '@/routes/RoleRoute'
 //   RoleRoute        blocks the wrong role (Phase 5)
 //   ProtectedRoute   requires a signed-in user (Phase 5)
 //
-// The dashboard cards and the navbar link to feature pages (my rides, payments,
-// history, tesla, requests, active trip) that 404 until their phases land -
-// accepted in-progress state, consistent with earlier phases. /request is live
-// since Phase 7.
+// The dashboard cards and the navbar link to feature pages (payments, history,
+// tesla, requests, active trip) that 404 until their phases land - accepted
+// in-progress state, consistent with earlier phases. /request is live since
+// Phase 7, /my-rides and /my-rides/:rideId since Phase 8.
 export default function AppRoutes() {
   return (
     <Routes>
@@ -56,6 +58,30 @@ export default function AppRoutes() {
             <RoleRoute role={ROLES.PASSENGER}>
               <AppShell>
                 <RequestRidePage />
+              </AppShell>
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-rides"
+        element={
+          <ProtectedRoute>
+            <RoleRoute role={ROLES.PASSENGER}>
+              <AppShell>
+                <MyRidesPage />
+              </AppShell>
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-rides/:rideId"
+        element={
+          <ProtectedRoute>
+            <RoleRoute role={ROLES.PASSENGER}>
+              <AppShell>
+                <RideDetailPage />
               </AppShell>
             </RoleRoute>
           </ProtectedRoute>
