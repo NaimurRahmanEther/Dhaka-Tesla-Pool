@@ -8,6 +8,8 @@ const findActivePoolByDriverId = async (driverId) => {
       SELECT
           pools.id AS pool_id,
           pools.status AS pool_status,
+          pools.current_route,
+          pools.route_updated_at,
           vehicles.id AS vehicle_id,
           vehicles.model,
           vehicles.capacity,

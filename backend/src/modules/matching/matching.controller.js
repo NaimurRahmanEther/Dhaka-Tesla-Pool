@@ -41,7 +41,7 @@ const matchRide = asyncHandler(async (req, res) => {
   return successResponse(res, 200, "Ride matched successfully", result);
 });
 
-// Open requests this driver could take. The frontend polls this endpoint.
+// Open requests this driver could take.
 const listOpenRequests = asyncHandler(async (req, res) => {
   const requests = await matchingService.listOpenRequests(req.user.id);
 
@@ -66,7 +66,7 @@ const acceptRide = asyncHandler(async (req, res) => {
     throw new AppError("Ride already processed", 409);
   }
 
-  const result = await matchingService.acceptRide(ride, req.user.id);
+  const result = await matchingService.acceptRide(ride, req.user.id, req.body);
 
   return successResponse(res, 200, "Ride accepted successfully", result);
 });

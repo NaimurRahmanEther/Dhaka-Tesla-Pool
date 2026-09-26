@@ -11,11 +11,11 @@ const createRoute = async (driverId, data) => {
     throw new AppError("Driver vehicle not found", 404);
   }
 
-  const route = await graphService.calculateDriverRoute({
-    currentLocationId: vehicle.current_location_id,
-    pickupLocationId: vehicle.current_location_id,
-    destinationLocationId: data.destinationLocationId,
-  });
+  const startLocationId = data.currentLocationId ?? vehicle.current_location_id;
+  if (startLocationId === data.destinationLocationId) {
+    throw new AppError("Choose a destination different from your current location", 400);
+  }
+  const route = await graphService.shortestPath(startLocationId, data.destinationLocationId);
 
   if (!route) {
     throw new AppError("Route calculation failed", 400);
@@ -23,7 +23,7 @@ const createRoute = async (driverId, data) => {
 
   return routeRepository.createDriverRoute({
     driverId,
-    startLocationId: vehicle.current_location_id,
+    startLocationId,
     destinationLocationId: data.destinationLocationId,
     route,
   });

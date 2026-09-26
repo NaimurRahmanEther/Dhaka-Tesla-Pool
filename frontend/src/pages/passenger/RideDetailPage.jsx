@@ -14,7 +14,7 @@ import {
   Spinner,
 } from '@/components/ui'
 import useApi from '@/hooks/useApi'
-import usePolling from '@/hooks/usePolling'
+import TripRoute from '@/components/ride/TripRoute'
 import { canCancelRide, formatDateTime } from '@/lib/format'
 import { RIDE_STATUS_ORDER } from '@/lib/constants'
 import rideService from '@/services/ride.service'
@@ -42,10 +42,6 @@ export default function RideDetailPage() {
     rides.reload(options)
     history.reload(options)
   }
-  usePolling(
-    refresh,
-    Boolean(ride && !['COMPLETED', 'CANCELLED'].includes(ride.status) && !cancelling),
-  )
   async function cancel() {
     setCancelling(true)
     setCancelError(null)
@@ -154,6 +150,15 @@ export default function RideDetailPage() {
               </span>
             </div>
           </Card>
+          {ride.trip_route && ride.status !== 'CANCELLED' && (
+            <Card>
+              <h2 className="mb-6 text-lg font-bold text-brand-900">Your shared trip route</h2>
+              <TripRoute route={ride.trip_route} />
+              <p className="mt-4 text-xs leading-5 text-slate-500">
+                This is the full shared route, including other stops. Use Refresh to see changes after another passenger joins.
+              </p>
+            </Card>
+          )}
           <Card>
             <h2 className="mb-6 text-lg font-bold text-brand-900">Along the way</h2>
             {history.loading && history.data === null ? (

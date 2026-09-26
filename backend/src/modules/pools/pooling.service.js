@@ -49,9 +49,10 @@ const addPassengerToPool = async ({ poolId, ride }) => {
     const currentRoute = activePool.current_route;
 
     const bestRoute = await findBestRoute({
-      currentRoute: currentRoute.path,
+      currentRoute: currentRoute.stops ?? currentRoute.path,
       pickup: ride.pickup_location_id,
       destination: ride.destination_location_id,
+      keepDestination: Boolean(currentRoute.driverDestinationId),
     });
 
     if (!bestRoute) {
@@ -92,7 +93,9 @@ const addPassengerToPool = async ({ poolId, ride }) => {
     const updatedPool = await poolingRepository.updatePoolRoute(client, {
       poolId,
       route: {
-        path: bestRoute.route,
+        path: bestRoute.path,
+        stops: bestRoute.route,
+        driverDestinationId: currentRoute.driverDestinationId,
         distance: bestRoute.distance,
       },
     });

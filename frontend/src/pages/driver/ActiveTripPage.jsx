@@ -12,7 +12,7 @@ import {
   Spinner,
 } from '@/components/ui'
 import useApi from '@/hooks/useApi'
-import usePolling from '@/hooks/usePolling'
+import TripRoute from '@/components/ride/TripRoute'
 import poolService from '@/services/pool.service'
 import tripService from '@/services/trip.service'
 
@@ -61,7 +61,6 @@ export default function ActiveTripPage() {
     trip.reload(options)
     manifest.reload(options)
   }
-  usePolling(refresh, Boolean(poolId && !ended && !busy))
   async function act(key) {
     setBusy(key)
     setError(null)
@@ -112,11 +111,11 @@ export default function ActiveTripPage() {
           </span>
           <h2 className="mt-5 text-2xl font-bold text-brand-900">Another journey, well shared.</h2>
           <p className="mt-3 max-w-lg text-sm leading-6 text-slate-500">
-            Your trip is complete. Passengers can now pay their fares from the Payments page.
+            Your trip is complete. Update your current location and choose a destination for your next trip.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <LinkButton to="/requests">
-              Find your next ride <Icon name="arrow" />
+            <LinkButton to="/tesla">
+              Plan your next route <Icon name="arrow" />
             </LinkButton>
             <LinkButton variant="secondary" to="/history">
               View trip history
@@ -172,6 +171,18 @@ export default function ActiveTripPage() {
                 <p className="mt-1 text-lg font-bold text-brand-900">Pool #{poolId}</p>
               </div>
             </div>
+          </Card>
+          <Card className="mt-6">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+              <h2 className="text-lg font-bold text-brand-900">Your trip route</h2>
+              <LinkButton to="/requests" variant="secondary" size="sm">
+                Add a passenger <Icon name="arrow" />
+              </LinkButton>
+            </div>
+            <TripRoute route={rows[0].current_route} />
+            <p className="mt-4 text-xs leading-5 text-slate-500">
+              Accepting a passenger updates this route with their pickup and destination. Use Refresh to see the latest route.
+            </p>
           </Card>
           <div className="mt-6 grid items-start gap-6 xl:grid-cols-[1fr_1.25fr]">
             <Card>
@@ -251,7 +262,7 @@ export default function ActiveTripPage() {
               <div className="mt-6 border-t border-slate-100 pt-5">
                 <Badge status="ACTIVE" />
                 <p className="mt-3 text-xs leading-5 text-slate-500">
-                  Passenger details refresh automatically. Share the pool number with riders who
+                  Use Refresh to update passenger details. Share the pool number with riders who
                   want to join.
                 </p>
               </div>

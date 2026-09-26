@@ -1,6 +1,6 @@
 const graphService = require("../graph/graph.service");
 
-const MAX_DETOUR_DISTANCE = 5;
+const MAX_DETOUR_DISTANCE = 2;
 
 // Calculate detour
 
@@ -32,20 +32,26 @@ const collapseConsecutiveDuplicates = (route) => {
 
 // Generate possible routes
 
-const generateInsertionRoutes = (currentRoute, pickup, destination) => {
+const generateInsertionRoutes = (
+  currentRoute,
+  pickup,
+  destination,
+  keepDestination = false,
+) => {
   const routes = [];
-
-  for (let i = 0; i <= currentRoute.length; i++) {
-    for (let j = i + 1; j <= currentRoute.length + 1; j++) {
-      const route = [
-        ...currentRoute.slice(0, i),
-        pickup,
-        ...currentRoute.slice(i, j),
-        destination,
-        ...currentRoute.slice(j),
-      ];
-
-      routes.push(collapseConsecutiveDuplicates(route));
+  // The car must start where it is. Keep the driver's selected destination
+  // last, and always insert the new pickup before its drop-off.
+  const end = currentRoute.length - (keepDestination ? 1 : 0);
+  for (let i = 1; i <= end; i++) {
+    const withPickup = [
+      ...currentRoute.slice(0, i), pickup, ...currentRoute.slice(i),
+    ];
+    for (let j = i + 1; j <= end + 1; j++) {
+      routes.push(
+        collapseConsecutiveDuplicates([
+          ...withPickup.slice(0, j), destination, ...withPickup.slice(j),
+        ]),
+      );
     }
   }
 
@@ -72,11 +78,12 @@ const calculateRouteDistance = async (route) => {
 
 // Find optimized route
 
-const findBestRoute = async ({ currentRoute, pickup, destination }) => {
+const findBestRoute = async ({ currentRoute, pickup, destination, keepDestination = false }) => {
   const possibleRoutes = generateInsertionRoutes(
     currentRoute,
     pickup,
     destination,
+    keepDestination,
   );
 
   let bestRoute = null;
@@ -99,6 +106,7 @@ const findBestRoute = async ({ currentRoute, pickup, destination }) => {
 
   return {
     route: bestRoute,
+    path: (await graphService.calculateRoutePath(bestRoute)).path,
     distance: minimumDistance,
   };
 };
