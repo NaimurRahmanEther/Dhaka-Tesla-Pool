@@ -17,6 +17,8 @@ import RequestRidePage from '@/pages/passenger/RequestRidePage'
 import RideDetailPage from '@/pages/passenger/RideDetailPage'
 import JoinPoolPage from '@/pages/passenger/JoinPoolPage'
 import PaymentsPage from '@/pages/passenger/PaymentsPage'
+import PassengerHistoryPage from '@/pages/passenger/HistoryPage'
+import DriverHistoryPage from '@/pages/driver/HistoryPage'
 import ProtectedRoute from '@/routes/ProtectedRoute'
 import PublicOnlyRoute from '@/routes/PublicOnlyRoute'
 import RoleRoute from '@/routes/RoleRoute'
@@ -37,7 +39,7 @@ import RoleRoute from '@/routes/RoleRoute'
 // with earlier phases. /request is live since Phase 7, /my-rides and
 // /my-rides/:rideId since Phase 8, /tesla since Phase 9, /requests since
 // Phase 10, /active-trip since Phase 11, /join-pool since Phase 12,
-// /payments since Phase 13.
+// /payments since Phase 13, /history since Phase 14.
 export default function AppRoutes() {
   return (
     <Routes>
@@ -131,6 +133,18 @@ export default function AppRoutes() {
         }
       />
       <Route
+        path="/history"
+        element={
+          <ProtectedRoute>
+            <RoleRoute role={ROLES.PASSENGER}>
+              <AppShell>
+                <PassengerHistoryPage />
+              </AppShell>
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/tesla"
         element={
           <ProtectedRoute>
@@ -161,6 +175,18 @@ export default function AppRoutes() {
             <RoleRoute role={ROLES.DRIVER}>
               <AppShell>
                 <ActiveTripPage />
+              </AppShell>
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/history"
+        element={
+          <ProtectedRoute>
+            <RoleRoute role={ROLES.DRIVER}>
+              <AppShell>
+                <DriverHistoryPage />
               </AppShell>
             </RoleRoute>
           </ProtectedRoute>
