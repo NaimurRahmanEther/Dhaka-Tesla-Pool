@@ -1,17 +1,14 @@
 import { Link } from 'react-router-dom'
 
-// No hardcoded data on this page, by design.
-//
-// The first version printed a fare table showing 210 for a solo trip and 170 for
-// a pooled one, copied out of the brief rather than fetched. That made the page
-// assert a number the app had never computed, and nothing would have flagged it
-// until it was wrong.
-//
-// There is also no fare endpoint to call. `modules/fare/` is a service and a util
-// used inside the backend, and the server stores its result on each ride as
-// `fare_breakdown` JSONB. So the real breakdown is rendered per ride, from the
-// server's own figures, where a passenger can check it by hand. See section 5a of
-// FRONTEND_BUILD_NOTES.md.
+import useApi from '@/hooks/useApi'
+import healthService from '@/services/health.service'
+import locationService from '@/services/location.service'
+
+// No hardcoded data on this page, by design. The status and the location list
+// below are fetched live: GET /health reports the real backend and database
+// state, and GET /location returns the real rows from the locations table. If
+// the backend is unreachable the page says so and offers a retry, instead of
+// pretending everything is fine.
 const STEPS = [
   {
     title: 'Request your ride',
@@ -41,7 +38,6 @@ const ROLES = [
       'Share a seat with someone going your way',
       'Pay by cash or Tesla wallet',
     ],
-    cta: { to: '/register', label: 'Sign up as a passenger' },
   },
   {
     title: 'I want to drive',
@@ -52,11 +48,13 @@ const ROLES = [
       'Choose requests by detour and seats free',
       'Run the trip and collect the fares',
     ],
-    cta: { to: '/register', label: 'Sign up as a driver' },
   },
 ]
 
 export default function LandingPage() {
+  const health = useApi(healthService.getHealth, [])
+  const locations = useApi(locationService.getAll, [])
+
   return (
     <main className="mx-auto max-w-5xl px-6 pb-20">
       <section className="pt-16 text-center">
@@ -86,10 +84,67 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="mt-20">
-        <h2 className="text-center text-2xl font-bold tracking-tight">
-          How it works
-        </h2>
+      <section className="mx-auto mt-10 max-w-2xl rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-700">Service status</h2>
+        {health.loading && <p className="mt-2 text-sm text-slate-500">Checking the backend…</p>}
+        {health.error && (
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-red-700">Could not reach the backend — check that it is running on port 8000.</p>
+            <button
+              type="button"
+              onClick={health.reload}
+              className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+        {health.data && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-700">
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              API online
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-700">
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Database {health.data.database === 'up' ? 'connected' : 'down'}
+            </span>
+          </div>
+        )}
+      </section>
+
+      <section className="mt-12">
+        <h2 className="text-xl font-bold tracking-tight">City stops</h2>
+        {locations.loading && <p className="mt-3 text-sm text-slate-500">Loading stops…</p>}
+        {locations.error && (
+          <p className="mt-3 text-sm text-red-700">
+            Could not load the location list — {locations.error.message}
+          </p>
+        )}
+        {locations.data?.length > 0 && (
+          <>
+            <p className="mt-1 text-sm text-slate-500">
+              Rides run between these real stops in the database:
+            </p>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {locations.data.map((location) => (
+                <li
+                  key={location.id}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700"
+                >
+                  {location.name}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {locations.data?.length === 0 && (
+          <p className="mt-3 text-sm text-slate-500">No stops have been seeded yet.</p>
+        )}
+      </section>
+
+      <section className="mt-16">
+        <h2 className="text-2xl font-bold tracking-tight">How it works</h2>
         <ol className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((step, index) => (
             <li key={step.title}>
@@ -105,11 +160,9 @@ export default function LandingPage() {
         </ol>
       </section>
 
-      <section className="mt-20">
-        <h2 className="text-center text-2xl font-bold tracking-tight">
-          Which one are you?
-        </h2>
-        <p className="mx-auto mt-2 max-w-xl text-center text-slate-600">
+      <section className="mt-16">
+        <h2 className="text-2xl font-bold tracking-tight">Which one are you?</h2>
+        <p className="mx-auto mt-2 max-w-xl text-slate-600">
           You can only do one at a time, so pick a side to get started.
         </p>
 
@@ -132,10 +185,10 @@ export default function LandingPage() {
                 ))}
               </ul>
               <Link
-                to={item.cta.to}
+                to="/register"
                 className="mt-6 rounded-lg border border-slate-300 px-4 py-2 text-center text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
-                {item.cta.label}
+                Sign up as a {item.role.toLowerCase()}
               </Link>
             </article>
           ))}

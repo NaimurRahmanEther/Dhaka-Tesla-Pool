@@ -207,6 +207,12 @@ return data.map((ride) => <RideCard key={ride.id} ride={ride} />)
 `reload` is what a cancel, an accept, or a status change calls so the list reflects
 the server instead of guessing at the new state locally.
 
+The landing page is the working example of this pattern: it fetches `GET /health`
+and `GET /location` through `useApi`, so the "API online"/"Database connected"
+pills and the city-stop list it renders are live answers from the backend, not
+marketing copy. If the backend is down the page says so and offers a Try again
+button wired to `reload`.
+
 ### Token expiry
 
 Access tokens last 15 minutes. When a request comes back `401`, `client.js` calls
