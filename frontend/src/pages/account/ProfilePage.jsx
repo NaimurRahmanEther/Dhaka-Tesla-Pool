@@ -1,33 +1,69 @@
-import { Card, PageHeader } from '@/components/ui'
+import { useState } from 'react'
+import { Alert, Button, Card, Input, PageHeader } from '@/components/ui'
 import useAuth from '@/hooks/useAuth'
+import userService from '@/services/user.service'
 
-// Placeholder for Phase 6 only. It renders the signed-in user from the auth
-// context - the same object /users/me returned when the session was restored -
-// so this page proves live data reaches a signed-in page without any fetching
-// of its own. Phase 14 turns it into the full profile: edit name and email via
-// PATCH /users/me.
+// Full profile page: view and edit name/email via PATCH /users/me.
 export default function ProfilePage() {
-  const { user } = useAuth()
+  const { user, reloadUser } = useAuth()
+
+  const [name, setName] = useState(user?.name || '')
+  const [email, setEmail] = useState(user?.email || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(false)
+
+  const hasChanges = name !== user?.name || email !== user?.email
+
+  async function handleSave(event) {
+    event.preventDefault()
+    setSaving(true)
+    setError(null)
+    setSuccess(false)
+
+    try {
+      await userService.updateMe({ name, email })
+      reloadUser()
+      setSuccess(true)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <>
-      <PageHeader title="Profile" description="Your account details." />
+      <PageHeader title="Profile" description="Your account details. Changes take effect immediately." />
 
-      <Card className="mt-8">
-        <dl className="divide-y divide-slate-100 text-sm">
-          <div className="flex items-center justify-between py-3">
-            <dt className="text-slate-500">Name</dt>
-            <dd className="font-medium text-slate-900">{user.name}</dd>
-          </div>
-          <div className="flex items-center justify-between py-3">
-            <dt className="text-slate-500">Email</dt>
-            <dd className="font-medium text-slate-900">{user.email}</dd>
-          </div>
-          <div className="flex items-center justify-between py-3">
-            <dt className="text-slate-500">Role</dt>
-            <dd className="font-medium text-slate-900">{user.role}</dd>
-          </div>
-        </dl>
+      {error && <Alert tone="error" className="mt-6">{error}</Alert>}
+      {success && <Alert tone="success" className="mt-6">Profile updated</Alert>}
+
+      <Card className="mt-6">
+        <form className="p-6 space-y-4" onSubmit={handleSave}>
+          <Input
+            id="profile-name"
+            label="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={saving}
+            error={error}
+          />
+          <Input
+            id="profile-email"
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={saving}
+            error={error}
+          />
+          <p className="text-xs text-slate-500">Role: <span className="font-medium text-slate-900">{user?.role}</span></p>
+
+          <Button type="submit" full loading={saving} disabled={!hasChanges || saving}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+        </form>
       </Card>
     </>
   )
