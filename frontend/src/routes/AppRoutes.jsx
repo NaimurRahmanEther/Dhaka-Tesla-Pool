@@ -16,6 +16,7 @@ import PassengerHome from '@/pages/passenger/PassengerHome'
 import RequestRidePage from '@/pages/passenger/RequestRidePage'
 import RideDetailPage from '@/pages/passenger/RideDetailPage'
 import JoinPoolPage from '@/pages/passenger/JoinPoolPage'
+import PaymentsPage from '@/pages/passenger/PaymentsPage'
 import ProtectedRoute from '@/routes/ProtectedRoute'
 import PublicOnlyRoute from '@/routes/PublicOnlyRoute'
 import RoleRoute from '@/routes/RoleRoute'
@@ -35,7 +36,8 @@ import RoleRoute from '@/routes/RoleRoute'
 // that 404 until their phases land - accepted in-progress state, consistent
 // with earlier phases. /request is live since Phase 7, /my-rides and
 // /my-rides/:rideId since Phase 8, /tesla since Phase 9, /requests since
-// Phase 10, /active-trip since Phase 11, /join-pool since Phase 12.
+// Phase 10, /active-trip since Phase 11, /join-pool since Phase 12,
+// /payments since Phase 13.
 export default function AppRoutes() {
   return (
     <Routes>
@@ -111,6 +113,18 @@ export default function AppRoutes() {
             <RoleRoute role={ROLES.PASSENGER}>
               <AppShell>
                 <JoinPoolPage />
+              </AppShell>
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/payments"
+        element={
+          <ProtectedRoute>
+            <RoleRoute role={ROLES.PASSENGER}>
+              <AppShell>
+                <PaymentsPage />
               </AppShell>
             </RoleRoute>
           </ProtectedRoute>
