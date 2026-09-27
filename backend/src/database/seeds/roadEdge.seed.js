@@ -19,6 +19,7 @@ const edges = [
     to: "Dhanmondi",
     distance: 6,
   },
+  // Alternative route
   {
     from: "Mohakhali",
     to: "Bashundhara",
@@ -29,6 +30,7 @@ const edges = [
     to: "Uttara",
     distance: 8,
   },
+  // Mirpur branch
   {
     from: "Mohakhali",
     to: "Mirpur",
@@ -39,6 +41,7 @@ const edges = [
     to: "Dhanmondi",
     distance: 8,
   },
+  // Extra connectivity
   {
     from: "Gulshan",
     to: "Bashundhara",
@@ -77,7 +80,8 @@ async function seedRoadEdges(pool) {
       continue;
     }
 
-    // Check existing edges because road_edges has no unique constraint.
+    // Check first: `road_edges` has no unique constraint, so `ON CONFLICT`
+    // would never fire and every re-run would duplicate the graph.
     const existing = await pool.query(
       `
         SELECT 1

@@ -4,6 +4,7 @@ const asyncHandler = require("../../middleware/asyncHandler");
 
 const successResponse = require("../../utils/response");
 
+// Passenger history
 
 const getPassengerHistory = asyncHandler(async (req, res) => {
   const passengerId = req.user.id;
@@ -16,6 +17,7 @@ const getPassengerHistory = asyncHandler(async (req, res) => {
   );
 });
 
+// Driver history
 
 const getDriverHistory = asyncHandler(async (req, res) => {
   const driverId = req.user.id;

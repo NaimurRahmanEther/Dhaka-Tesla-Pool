@@ -9,6 +9,7 @@ const vehicleRepository = require("../vehicles/vehicle.repository");
 
 const AppError = require("../../utils/AppError");
 
+// Automatic matching: the system picks the best Tesla for the ride.
 const matchRide = asyncHandler(async (req, res) => {
   const rideId = Number(req.params.rideId);
   const ride = await rideRepository.findRideById(rideId);
@@ -21,6 +22,8 @@ const matchRide = asyncHandler(async (req, res) => {
     throw new AppError("Ride already processed", 400);
   }
 
+  // Only a driver who is actually online with a Tesla can trigger matching,
+  // so a stale or driverless account cannot dispatch other people's rides.
   const driverVehicle = await vehicleRepository.findVehicleByDriverId(
     req.user.id,
   );
@@ -38,6 +41,7 @@ const matchRide = asyncHandler(async (req, res) => {
   return successResponse(res, 200, "Ride matched successfully", result);
 });
 
+// Open requests this driver could take. The frontend polls this endpoint.
 const listOpenRequests = asyncHandler(async (req, res) => {
   const requests = await matchingService.listOpenRequests(req.user.id);
 
@@ -49,6 +53,7 @@ const listOpenRequests = asyncHandler(async (req, res) => {
   );
 });
 
+// A driver accepts one specific request with their own Tesla.
 const acceptRide = asyncHandler(async (req, res) => {
   const rideId = Number(req.params.rideId);
   const ride = await rideRepository.findRideById(rideId);
@@ -61,7 +66,7 @@ const acceptRide = asyncHandler(async (req, res) => {
     throw new AppError("Ride already processed", 409);
   }
 
-  const result = await matchingService.acceptRide(ride, req.user.id, req.body);
+  const result = await matchingService.acceptRide(ride, req.user.id);
 
   return successResponse(res, 200, "Ride accepted successfully", result);
 });

@@ -1,5 +1,6 @@
 const pool = require("../../database/db");
 
+// Get all locations
 
 const findAllLocations = async () => {
   const result = await pool.query(
@@ -13,6 +14,7 @@ const findAllLocations = async () => {
   return result.rows;
 };
 
+// Find location by id
 
 const findLocationById = async (id) => {
   const result = await pool.query(

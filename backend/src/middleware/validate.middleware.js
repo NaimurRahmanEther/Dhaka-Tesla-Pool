@@ -1,6 +1,7 @@
 const AppError = require("../utils/AppError");
 
-// Support both Zod v4 issues and the older errors property.
+// Zod v4 exposes issues on `error.issues` (v3 used `error.errors`).
+// Support both so the middleware does not depend on the installed minor.
 const getIssues = (error) => error.issues || error.errors || [];
 
 const validate = (schema) => {

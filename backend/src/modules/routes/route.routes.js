@@ -10,6 +10,7 @@ const validate = require("../../middleware/validate.middleware");
 
 const { createRouteSchema } = require("./route.validation");
 
+// Generate driver route
 
 router.post(
   "/",
@@ -19,6 +20,7 @@ router.post(
   controller.createRoute,
 );
 
+// Get current route
 
 router.get(
   "/me",

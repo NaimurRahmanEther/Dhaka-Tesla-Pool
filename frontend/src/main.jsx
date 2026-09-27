@@ -6,6 +6,8 @@ import App from '@/App'
 import AuthProvider from '@/context/AuthProvider'
 import '@/index.css'
 
+// The provider stack lives here and grows one entry at a time.
+// Currently: BrowserRouter > AuthProvider > App.
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>

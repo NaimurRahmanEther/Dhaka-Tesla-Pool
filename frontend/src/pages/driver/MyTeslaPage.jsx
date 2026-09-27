@@ -12,19 +12,17 @@ import {
   Select,
   Spinner,
 } from '@/components/ui'
-import TripRoute from '@/components/ride/TripRoute'
+import RouteSummary from '@/components/ride/RouteSummary'
 import useApi from '@/hooks/useApi'
 import { formatDateTime } from '@/lib/format'
 import locationService from '@/services/location.service'
 import routeService from '@/services/route.service'
 import vehicleService from '@/services/vehicle.service'
-import tripService from '@/services/trip.service'
 
 export default function MyTeslaPage() {
   const locations = useApi(locationService.getAll, [])
   const vehicle = useApi(vehicleService.getMyVehicle, [])
   const route = useApi(routeService.getMyRoute, [])
-  const activeTrip = useApi(tripService.getMyActiveTrip, [])
   const [model, setModel] = useState('')
   const [capacity, setCapacity] = useState('')
   const [currentLocation, setCurrentLocation] = useState('')
@@ -37,9 +35,6 @@ export default function MyTeslaPage() {
   const nameFor = (id) => locations.data?.find((l) => l.id === id)?.name
   const noVehicle = vehicle.error?.status === 404
   const online = vehicle.data?.status === 'ONLINE'
-  const selectedLocation = currentLocation || String(vehicle.data?.current_location_id ?? '')
-  const hasActiveTrip = !activeTrip.error && Boolean(activeTrip.data?.length)
-  const tripLoadFailed = Boolean(activeTrip.error && activeTrip.error.status !== 404)
   async function register(event) {
     event.preventDefault()
     const next = {}
@@ -80,7 +75,7 @@ export default function MyTeslaPage() {
   }
   async function plan(event) {
     event.preventDefault()
-    if (!destination || destination === selectedLocation) {
+    if (!destination) {
       setErrors({ destination: 'Choose a destination' })
       return
     }
@@ -89,9 +84,8 @@ export default function MyTeslaPage() {
     setErrors({})
     setNotice(null)
     try {
-      await routeService.createRoute(Number(destination), Number(selectedLocation))
+      await routeService.createRoute(Number(destination))
       route.reload()
-      vehicle.reload()
       setDestination('')
       setNotice('Your planned route has been updated.')
     } catch (err) {
@@ -248,7 +242,7 @@ export default function MyTeslaPage() {
           <Card>
             <h2 className="text-lg font-bold text-brand-900">Where are you heading?</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Choose your current location and destination to calculate and save your route.
+              Save a planned route from your current location.
             </p>
             {route.loading ? (
               <div className="py-8">
@@ -260,9 +254,12 @@ export default function MyTeslaPage() {
               </Alert>
             ) : route.data ? (
               <div className="my-6 rounded-xl bg-canvas p-5">
-                <TripRoute route={route.data.route} />
+                <RouteSummary
+                  pickup={nameFor(route.data.start_location_id)}
+                  destination={nameFor(route.data.destination_location_id)}
+                />
                 <p className="mt-5 text-xs text-slate-500">
-                  Last planned {formatDateTime(route.data.created_at)}
+                  {route.data.route.distance} km · Planned {formatDateTime(route.data.created_at)}
                 </p>
               </div>
             ) : (
@@ -270,44 +267,14 @@ export default function MyTeslaPage() {
                 No route planned yet. Choose your destination below.
               </p>
             )}
-            {hasActiveTrip && (
-              <Alert className="mt-5">
-                Complete your active trip before changing your location and destination.
-                <LinkButton to="/active-trip" variant="secondary" className="mt-3">
-                  View trip route <Icon name="arrow" />
-                </LinkButton>
-              </Alert>
-            )}
-            {tripLoadFailed && (
-              <Alert className="mt-5" tone="error">
-                {activeTrip.error.message}
-                <Button variant="secondary" className="mt-3" onClick={() => activeTrip.reload()}>
-                  Try again
-                </Button>
-              </Alert>
-            )}
             <form className="mt-5" noValidate onSubmit={plan}>
-              <fieldset
-                disabled={busy !== null || hasActiveTrip || activeTrip.loading || tripLoadFailed}
-                className="space-y-5"
-              >
-                <Select
-                  label="Current location"
-                  options={options}
-                  value={selectedLocation}
-                  onChange={(e) => {
-                    setCurrentLocation(e.target.value)
-                    setDestination('')
-                  }}
-                  required
-                />
-                <p className="text-xs leading-5 text-slate-500">
-                  Update your location yourself before planning your next trip.
-                </p>
+              <fieldset disabled={busy !== null} className="space-y-5">
                 <Select
                   label={route.data ? 'New destination' : 'Destination'}
                   placeholder="Choose a destination"
-                  options={options.filter((o) => o.value !== selectedLocation)}
+                  options={options.filter(
+                    (o) => o.value !== String(vehicle.data.current_location_id),
+                  )}
                   value={destination}
                   onChange={(e) => setDestination(e.target.value)}
                   error={errors.destination}

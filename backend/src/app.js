@@ -37,7 +37,8 @@ app.get("/", (req, res) => {
   });
 });
 
-// Include a database round trip in the health check.
+// Liveness plus a real database round trip, so this reports unhealthy when the
+// database is down rather than always returning OK.
 app.get("/health", async (req, res) => {
   try {
     await pool.query("SELECT 1");
@@ -70,6 +71,8 @@ app.use("/trips", tripRoute);
 app.use("/history", historyRoute);
 app.use("/payments", paymentRouter);
 
+// The error pipeline lives on the app, not the server entry point, so every
+// response - including a 404 - comes back in the API's JSON shape.
 app.use(notFound);
 app.use(errorHandler);
 
