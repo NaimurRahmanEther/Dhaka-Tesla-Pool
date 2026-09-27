@@ -18,7 +18,8 @@ const env = {
   CORS_ORIGIN: process.env.CORS_ORIGIN || "http://localhost:5173",
 };
 
-// Reject missing required configuration before starting the server.
+// Fail fast at boot rather than deep inside the first request. A missing
+// signing key would otherwise only surface as a 500 on the login route.
 const REQUIRED = [
   ["DB_HOST", env.DATABASE.HOST],
   ["DB_NAME", env.DATABASE.NAME],

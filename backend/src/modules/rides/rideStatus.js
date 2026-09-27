@@ -1,4 +1,5 @@
-// Allowed ride transitions and cancellation states.
+// The ride lifecycle in one place. Each repository step also guards with a
+// `WHERE status = ...` clause, so a skipped stage is a 409, not a silent jump.
 const RIDE_STATUS = {
   REQUESTED: "REQUESTED",
   MATCHED: "MATCHED",
@@ -8,6 +9,7 @@ const RIDE_STATUS = {
   CANCELLED: "CANCELLED",
 };
 
+// Forward-only lifecycle. Nothing ever moves back to an earlier stage.
 const ALLOWED_TRANSITIONS = {
   [RIDE_STATUS.REQUESTED]: [RIDE_STATUS.MATCHED, RIDE_STATUS.CANCELLED],
   [RIDE_STATUS.MATCHED]: [RIDE_STATUS.DRIVER_ARRIVED, RIDE_STATUS.CANCELLED],
@@ -17,6 +19,7 @@ const ALLOWED_TRANSITIONS = {
   [RIDE_STATUS.CANCELLED]: [],
 };
 
+// Once the Tesla is on its way the passenger can no longer cancel.
 const CANCELLABLE_STATUSES = [
   RIDE_STATUS.REQUESTED,
   RIDE_STATUS.MATCHED,

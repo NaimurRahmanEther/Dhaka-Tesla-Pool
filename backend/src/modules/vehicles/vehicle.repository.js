@@ -1,5 +1,6 @@
 const pool = require("../../database/db");
 
+// Create vehicle
 
 const createVehicle = async ({
   driverId,
@@ -32,6 +33,7 @@ const createVehicle = async ({
   return result.rows[0];
 };
 
+// Find vehicle by driver
 
 const findVehicleByDriverId = async (driverId) => {
   const result = await pool.query(
@@ -46,6 +48,7 @@ const findVehicleByDriverId = async (driverId) => {
   return result.rows[0];
 };
 
+// Find vehicle by id
 
 const findVehicleById = async (id) => {
   const result = await pool.query(
@@ -60,6 +63,7 @@ const findVehicleById = async (id) => {
   return result.rows[0];
 };
 
+// Seats already booked across this vehicle's active pools
 const getActivePoolOccupiedSeats = async (vehicleId) => {
   const result = await pool.query(
     `
@@ -80,6 +84,7 @@ const getActivePoolOccupiedSeats = async (vehicleId) => {
   return Number(result.rows[0].busiest);
 };
 
+// Update vehicle
 
 const updateVehicle = async (id, { model, capacity, currentLocationId }) => {
   const result = await pool.query(
@@ -99,6 +104,7 @@ const updateVehicle = async (id, { model, capacity, currentLocationId }) => {
   return result.rows[0];
 };
 
+// Update status
 
 const updateVehicleStatus = async (driverId, status) => {
   const result = await pool.query(

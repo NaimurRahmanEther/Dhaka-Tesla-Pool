@@ -2,6 +2,7 @@ const pool = require("../../database/db");
 
 const AppError = require("../../utils/AppError");
 
+// Find available Tesla vehicles
 
 const findAvailableVehicles = async () => {
   const result = await pool.query(
@@ -23,6 +24,7 @@ const findAvailableVehicles = async () => {
   return result.rows;
 };
 
+// One Tesla per driver, so this returns the vehicle itself.
 const findVehicleByDriverId = async (driverId) => {
   const result = await pool.query(
     `
@@ -44,6 +46,7 @@ const findVehicleByDriverId = async (driverId) => {
   return result.rows[0];
 };
 
+// Rides still waiting for a driver, oldest first so nobody is starved.
 const findOpenRequests = async () => {
   const result = await pool.query(
     `
@@ -72,6 +75,7 @@ const findOpenRequests = async () => {
   return result.rows;
 };
 
+// Find active pool of vehicle
 
 const findActivePoolByVehicleId = async (vehicleId) => {
   const result = await pool.query(
@@ -87,6 +91,7 @@ const findActivePoolByVehicleId = async (vehicleId) => {
   return result.rows[0];
 };
 
+// Get rides already inside pool
 
 const getPoolRides = async (poolId) => {
   const result = await pool.query(
@@ -101,6 +106,7 @@ const getPoolRides = async (poolId) => {
   return result.rows;
 };
 
+// Update ride fare
 
 const updateRideFare = async (rideId, fare, fareBreakdown = null) => {
   const result = await pool.query(
@@ -118,15 +124,14 @@ const updateRideFare = async (rideId, fare, fareBreakdown = null) => {
   return result.rows[0];
 };
 
-// Lock the vehicle before checking pool capacity and assigning seats.
+// Assign ride to pool. The authoritative capacity gate: the vehicle row is locked
+// first, so a race for the last seat is serialised and the loser is rejected.
 const assignRideToPool = async ({
   vehicleId,
   driverId,
   rideId,
   seatsAllocated,
   route,
-  buildRoute,
-  replaceDriverRoute = false,
 }) => {
   const client = await pool.connect();
 
@@ -161,12 +166,6 @@ const assignRideToPool = async ({
     );
 
     let activePool = poolResult.rows[0];
-    if (replaceDriverRoute && activePool) {
-      throw new AppError("You can change your route only before accepting your first passenger", 409);
-    }
-
-    // Rebuild the route under the lock to preserve concurrent passenger additions.
-    if (buildRoute) route = await buildRoute(vehicle, activePool);
 
     if (!activePool) {
       const newPool = await client.query(
@@ -195,7 +194,8 @@ const assignRideToPool = async ({
       activePool = newPool.rows[0];
     }
 
-    // Recheck seats under the lock using the pool capacity snapshot.
+    // Re-check under the lock. `pools.capacity` is the snapshot from when the pool
+    // opened, so this also catches a Tesla resized since.
     const occupiedResult = await client.query(
       `
         SELECT COALESCE(SUM(seats_allocated), 0) AS occupied
@@ -213,16 +213,6 @@ const assignRideToPool = async ({
         `Not enough seats available: ${availableSeats} left, ${seatsAllocated} requested`,
         409,
         "NO_SEAT_AVAILABLE",
-      );
-    }
-
-    if (replaceDriverRoute) {
-      // Save the replacement plan with the first acceptance in one transaction.
-      await client.query(
-        `INSERT INTO driver_routes
-          (driver_id, start_location_id, destination_location_id, route)
-         VALUES ($1,$2,$3,$4)`,
-        [driverId, vehicle.current_location_id, route.driverDestinationId, JSON.stringify(route)],
       );
     }
 
@@ -245,6 +235,7 @@ const assignRideToPool = async ({
       [activePool.id, rideId, seatsAllocated],
     );
 
+    // Keep the pool's route in step with the stops it now has to serve.
     const updatedPool = await client.query(
       `
         UPDATE pools
@@ -269,6 +260,8 @@ const assignRideToPool = async ({
       [rideId],
     );
 
+    // Record the acceptance so the audit trail covers the whole lifecycle
+    // rather than starting at DRIVER_ARRIVED.
     await client.query(
       `
         INSERT INTO ride_history (ride_id, actor_id, action)

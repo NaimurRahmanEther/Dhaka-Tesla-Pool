@@ -2,6 +2,7 @@ const vehicleRepository = require("./vehicle.repository");
 
 const AppError = require("../../utils/AppError");
 
+// Driver creates Tesla
 
 const createVehicle = async (driverId, data) => {
   const existingVehicle =
@@ -40,7 +41,8 @@ const updateVehicle = async (driverId, vehicleId, data) => {
     throw new AppError("You cannot update this vehicle", 403);
   }
 
-  // Reject capacity reductions below the currently booked seat count.
+  // Never let a driver shrink their Tesla below the seats already booked in an
+  // active pool, otherwise the pool would be permanently over capacity.
   if (typeof data.capacity === "number" && data.capacity < vehicle.capacity) {
     const booked = await vehicleRepository.getActivePoolOccupiedSeats(
       vehicleId,

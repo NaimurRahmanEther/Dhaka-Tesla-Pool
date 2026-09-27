@@ -1,5 +1,8 @@
 import { useId } from 'react'
 
+// Labelled text field. The id, hint and error wiring are generated here so every
+// form in the app gets accessible labels and announcements without each page
+// hand-rolling the htmlFor / aria-describedby plumbing.
 export default function Input({ label, hint, error, id, className = '', ...rest }) {
   const generatedId = useId()
   const inputId = id ?? generatedId

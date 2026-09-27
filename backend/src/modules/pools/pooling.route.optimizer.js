@@ -1,12 +1,14 @@
 const graphService = require("../graph/graph.service");
 
-const MAX_DETOUR_DISTANCE = 2;
+const MAX_DETOUR_DISTANCE = 5;
 
+// Calculate detour
 
 const calculateDetour = (oldDistance, newDistance) => {
   return newDistance - oldDistance;
 };
 
+// Check detour limit
 
 const isDetourAcceptable = (oldDistance, newDistance) => {
   const detour = calculateDetour(oldDistance, newDistance);
@@ -14,6 +16,8 @@ const isDetourAcceptable = (oldDistance, newDistance) => {
   return detour <= MAX_DETOUR_DISTANCE;
 };
 
+// Drop stops the Tesla already makes, so a matching pickup and destination
+// cannot produce a route like [1, 1, 2, 3, 3].
 const collapseConsecutiveDuplicates = (route) => {
   const collapsed = [];
 
@@ -26,32 +30,29 @@ const collapseConsecutiveDuplicates = (route) => {
   return collapsed;
 };
 
+// Generate possible routes
 
-const generateInsertionRoutes = (
-  currentRoute,
-  pickup,
-  destination,
-  keepDestination = false,
-) => {
+const generateInsertionRoutes = (currentRoute, pickup, destination) => {
   const routes = [];
-  // Keep the start and selected destination fixed; insert pickup before drop-off.
-  const end = currentRoute.length - (keepDestination ? 1 : 0);
-  for (let i = 1; i <= end; i++) {
-    const withPickup = [
-      ...currentRoute.slice(0, i), pickup, ...currentRoute.slice(i),
-    ];
-    for (let j = i + 1; j <= end + 1; j++) {
-      routes.push(
-        collapseConsecutiveDuplicates([
-          ...withPickup.slice(0, j), destination, ...withPickup.slice(j),
-        ]),
-      );
+
+  for (let i = 0; i <= currentRoute.length; i++) {
+    for (let j = i + 1; j <= currentRoute.length + 1; j++) {
+      const route = [
+        ...currentRoute.slice(0, i),
+        pickup,
+        ...currentRoute.slice(i, j),
+        destination,
+        ...currentRoute.slice(j),
+      ];
+
+      routes.push(collapseConsecutiveDuplicates(route));
     }
   }
 
   return routes;
 };
 
+// Calculate complete route distance
 
 const calculateRouteDistance = async (route) => {
   let distance = 0;
@@ -69,13 +70,13 @@ const calculateRouteDistance = async (route) => {
   return distance;
 };
 
+// Find optimized route
 
-const findBestRoute = async ({ currentRoute, pickup, destination, keepDestination = false }) => {
+const findBestRoute = async ({ currentRoute, pickup, destination }) => {
   const possibleRoutes = generateInsertionRoutes(
     currentRoute,
     pickup,
     destination,
-    keepDestination,
   );
 
   let bestRoute = null;
@@ -98,7 +99,6 @@ const findBestRoute = async ({ currentRoute, pickup, destination, keepDestinatio
 
   return {
     route: bestRoute,
-    path: (await graphService.calculateRoutePath(bestRoute)).path,
     distance: minimumDistance,
   };
 };

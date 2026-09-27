@@ -1,12 +1,29 @@
-import { readApiPayload } from './response'
-
-// Shared API client handles tokens, cookies, response parsing, and refresh retries.
+// src/api/client.js
+// The only file in the whole app that calls fetch().
+//
+// Everything else goes through the services in src/services/, which build the
+// URLs, and this file handles the HTTP bits once:
+//
+//   - the base URL from VITE_API_URL,
+//   - the Authorization header from the access token in memory (React state),
+//   - credentials: "include", so the httpOnly refresh-token cookie is sent,
+//   - unwrapping the { success, message, data } response envelope,
+//   - turning failures into a plain Error whose message the UI can show,
+//   - the 401 -> refresh -> retry-once story for 15-minute access tokens.
+//
+// The access token is NOT stored in localStorage. It lives only in React state
+// (AuthProvider). On app load, AuthProvider calls /auth/refresh-token to get
+// a fresh access token using the httpOnly refresh cookie.
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
-// Concurrent requests share one refresh request.
+// One in-flight refresh shared by all callers. If three requests 401 at the
+// same moment, they wait on this single promise instead of each calling
+// /auth/refresh-token and racing to store the token.
 let refreshing = null
 
-// Keep access tokens in memory; restore sessions through the HttpOnly refresh cookie.
+// Access token lives in memory only (React state in AuthProvider).
+// We don't use localStorage for access tokens - they're lost on page refresh
+// and re-acquired via the httpOnly refresh-token cookie.
 let accessToken = null
 
 function setAccessToken(token) {
@@ -26,6 +43,7 @@ async function refreshAccessToken() {
       })
 
       if (!response.ok) {
+        // The refresh cookie is dead too: clear the session.
         clearAccessToken()
         return false
       }
@@ -58,7 +76,8 @@ async function request(path, { method = 'GET', body } = {}) {
 
   let response = await send()
 
-  // Retry once after refresh; auth failures must not trigger refresh loops.
+  // A single retry after a refresh. Excluded for /auth/login: a wrong password
+  // is a real failure, not an expired token.
   if (response.status === 401 && !path.startsWith('/auth/')) {
     const refreshed = await refreshAccessToken()
     if (refreshed) {
@@ -67,7 +86,12 @@ async function request(path, { method = 'GET', body } = {}) {
     }
   }
 
-  const payload = await readApiPayload(response)
+  let payload
+  try {
+    payload = await response.json()
+  } catch {
+    payload = null
+  }
 
   if (!response.ok) {
     if (response.status === 401 && !path.startsWith('/auth/')) {
@@ -79,6 +103,8 @@ async function request(path, { method = 'GET', body } = {}) {
     throw error
   }
 
+  // The envelope carries the payload under `data`, which is all this app ever
+  // needs from a successful response.
   return payload?.data
 }
 

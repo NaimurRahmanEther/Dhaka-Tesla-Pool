@@ -1,5 +1,6 @@
 const pool = require("../../database/db");
 
+// Get driver's active pool with passengers
 
 const findActivePoolByDriverId = async (driverId) => {
   const result = await pool.query(
@@ -7,8 +8,6 @@ const findActivePoolByDriverId = async (driverId) => {
       SELECT
           pools.id AS pool_id,
           pools.status AS pool_status,
-          pools.current_route,
-          pools.route_updated_at,
           vehicles.id AS vehicle_id,
           vehicles.model,
           vehicles.capacity,
@@ -41,7 +40,10 @@ const findActivePoolByDriverId = async (driverId) => {
   return result.rows;
 };
 
-// Load the pool regardless of status to distinguish ownership errors from state conflicts.
+// Check driver owns pool and lock it
+
+// Deliberately does not filter on status. Doing both at once reported a
+// driver's own completed pool as "not found or unauthorized".
 const findPoolWithLock = async (client, poolId) => {
   const result = await client.query(
     `
@@ -56,6 +58,7 @@ const findPoolWithLock = async (client, poolId) => {
   return result.rows[0];
 };
 
+// Driver arrived
 
 const arriveTrip = async (client, poolId) => {
   const result = await client.query(
@@ -79,6 +82,7 @@ const arriveTrip = async (client, poolId) => {
   return result.rows;
 };
 
+// Start trip
 
 const startTrip = async (client, poolId) => {
   const result = await client.query(
@@ -102,6 +106,7 @@ const startTrip = async (client, poolId) => {
   return result.rows;
 };
 
+// Complete trip
 
 const completeTrip = async (client, poolId) => {
   const result = await client.query(
@@ -125,6 +130,7 @@ const completeTrip = async (client, poolId) => {
   return result.rows;
 };
 
+// Complete pool
 
 const completePool = async (client, poolId) => {
   const result = await client.query(
@@ -143,6 +149,7 @@ const completePool = async (client, poolId) => {
   return result.rows[0];
 };
 
+// Ride history
 
 const createRideHistory = async (client, { rideId, actorId, action }) => {
   const result = await client.query(

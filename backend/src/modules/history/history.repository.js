@@ -1,5 +1,6 @@
 const pool = require("../../database/db");
 
+// Passenger ride history
 
 const findPassengerHistory = async (passengerId) => {
   const result = await pool.query(
@@ -26,6 +27,7 @@ const findPassengerHistory = async (passengerId) => {
   return result.rows;
 };
 
+// Driver trip history
 
 const findDriverHistory = async (driverId) => {
   const result = await pool.query(
@@ -66,6 +68,8 @@ const findDriverHistory = async (driverId) => {
   return result.rows;
 };
 
+// The event trail for a single ride, oldest first, so the whole lifecycle is
+// visible in the order it happened.
 const findRideTimeline = async (rideId) => {
   const result = await pool.query(
     `
