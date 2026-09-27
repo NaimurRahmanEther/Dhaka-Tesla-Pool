@@ -27,8 +27,7 @@ const generateRefreshToken = (user) => {
   return jwt.sign(
     {
       id: user.id,
-      // The role is carried here too: the refresh flow mints a new access token
-      // from this payload, and a token without a role fails the role middleware.
+      // Include the role so refreshed access tokens pass role checks.
       role: user.role,
     },
     env.JWT_REFRESH_SECRET,

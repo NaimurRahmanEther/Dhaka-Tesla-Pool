@@ -1,8 +1,5 @@
 import { useId } from 'react'
 
-// Labelled dropdown. Options are { value, label } pairs. A placeholder renders
-// as a disabled, empty default so a form cannot silently submit a value the user
-// never chose.
 export default function Select({
   label,
   options,

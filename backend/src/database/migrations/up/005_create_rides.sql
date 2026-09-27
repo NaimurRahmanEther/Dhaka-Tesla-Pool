@@ -7,8 +7,7 @@ CREATE TYPE ride_status AS ENUM (
     'CANCELLED'
 );
 
--- Money is whole Taka, so `fare` is INTEGER to match `payments.amount`.
--- `fare_breakdown` keeps the line items, and each stage has its own timestamp.
+-- Store whole-BDT fares and their breakdown.
 CREATE TABLE rides (
     id SERIAL PRIMARY KEY,
     passenger_id INTEGER NOT NULL,

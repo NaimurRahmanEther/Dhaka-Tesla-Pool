@@ -1,5 +1,3 @@
-// The route optimiser lives with the pooling module; it is the single place
-// that knows how to insert a new stop into an existing Tesla route.
 const {
   findBestRoute,
   isDetourAcceptable,
@@ -12,12 +10,8 @@ const routeRepository = require("../routes/routes.repository");
 
 const AppError = require("../../utils/AppError");
 
-// Raised when a pool filled up between ranking and claiming, so the matcher
-// moves to the next candidate instead of failing.
 const NO_SEAT = "NO_SEAT_AVAILABLE";
 
-// How a Tesla would serve this ride now, or null. Both planners name the stop
-// list differently, so the route is normalised to { path, distance } here.
 const planRoute = async ({ vehicle, activePool, ride, changeRoute = false }) => {
   if (changeRoute && activePool) {
     throw new AppError("You can change your route only before accepting your first passenger", 409);
@@ -63,7 +57,6 @@ const planRoute = async ({ vehicle, activePool, ride, changeRoute = false }) => 
     };
   }
 
-  // No pool yet: drive to the pickup, then on to the destination.
   const planned = await graphService.calculateDriverRoute({
     currentLocationId: vehicle.current_location_id,
     pickupLocationId: ride.pickup_location_id,
@@ -86,7 +79,6 @@ const planRoute = async ({ vehicle, activePool, ride, changeRoute = false }) => 
   };
 };
 
-// Seats already taken in a Tesla's active pool.
 const occupiedIn = async (activePool) => {
   if (!activePool) return 0;
 
@@ -95,19 +87,16 @@ const occupiedIn = async (activePool) => {
   return poolRides.reduce((total, item) => total + item.seats_allocated, 0);
 };
 
-// The passenger is billed for their own leg (pickup -> destination), never for
-// the driver's deadhead drive to the pickup point.
+// Charge the passenger leg only, excluding the drive to pickup.
 const passengerLegDistance = async (ride) =>
   graphService.calculateRouteDistance([
     ride.pickup_location_id,
     ride.destination_location_id,
   ]);
 
-// Claim a seat in one Tesla. Single write path for both automatic matching and
-// manual accept. Capacity is decided in the transaction, so checks here are advisory.
+// Both matching paths share this claim; capacity checks are authoritative in the transaction.
 const claimSeat = async ({ ride, vehicle, activePool, route, changeRoute = false }) => {
-  // The first passenger into a pool pays the solo fare; sharing a Tesla is
-  // what earns the discount.
+  // The first passenger pays the solo fare; later joiners receive the pool discount.
   const isPool = Boolean(activePool);
 
   const fareResult = await fareService.calculateRideFare({
@@ -148,7 +137,6 @@ const claimSeat = async ({ ride, vehicle, activePool, route, changeRoute = false
   };
 };
 
-// Automatic matching: rank every online Tesla and try them best first.
 const matchRide = async (ride) => {
   const vehicles = await matchingRepository.findAvailableVehicles();
 
@@ -166,7 +154,7 @@ const matchRide = async (ride) => {
     const occupiedSeats = await occupiedIn(activePool);
     const freeSeats = vehicle.capacity - occupiedSeats;
 
-    // Cheap pre-filter only. Racy by nature, and deliberately not trusted.
+    // Prefilter only; capacity must be checked again under the lock.
     if (freeSeats < ride.seats_requested) {
       continue;
     }
@@ -196,8 +184,7 @@ const matchRide = async (ride) => {
     try {
       return await claimSeat({ ride, ...candidate });
     } catch (error) {
-      // Someone else took the last seat first. Move on to the next Tesla
-      // rather than failing the whole request.
+      // Try the next vehicle if another request claimed the remaining seats.
       if (error.code === NO_SEAT) {
         continue;
       }
@@ -209,7 +196,6 @@ const matchRide = async (ride) => {
   throw new AppError("No seat could be claimed for this ride", 409);
 };
 
-// The requests a driver can choose from and refresh manually.
 const listOpenRequests = async (driverId) => {
   const vehicle = await matchingRepository.findVehicleByDriverId(driverId);
 
@@ -228,8 +214,6 @@ const listOpenRequests = async (driverId) => {
   const occupiedSeats = await occupiedIn(activePool);
   const freeSeats = vehicle.capacity - occupiedSeats;
 
-  // Every ride still waiting for a driver, with the distance from this Tesla
-  // and whether it could realistically be picked up.
   const requests = await matchingRepository.findOpenRequests();
 
   const enriched = [];
@@ -251,7 +235,6 @@ const listOpenRequests = async (driverId) => {
     });
   }
 
-  // Rides this driver could actually take come first.
   enriched.sort((a, b) => {
     const aTakeable = a.detourAcceptable && a.fitsInMyTesla ? 1 : 0;
     const bTakeable = b.detourAcceptable && b.fitsInMyTesla ? 1 : 0;
@@ -268,7 +251,6 @@ const listOpenRequests = async (driverId) => {
   return enriched;
 };
 
-// A driver accepts one specific request with their own Tesla.
 const acceptRide = async (ride, driverId, { changeRoute = false } = {}) => {
   const vehicle = await matchingRepository.findVehicleByDriverId(driverId);
 
@@ -306,7 +288,6 @@ const acceptRide = async (ride, driverId, { changeRoute = false } = {}) => {
   try {
     return await claimSeat({ ride, vehicle, activePool, route: plan.route, changeRoute });
   } catch (error) {
-    // Re-raise the seat error with a message aimed at a driver, not a passenger.
     if (error.code === NO_SEAT) {
       throw new AppError(
         "The last seat was just taken, this request is no longer available",
@@ -319,7 +300,6 @@ const acceptRide = async (ride, driverId, { changeRoute = false } = {}) => {
   }
 };
 
-// Prefer a short detour, then whatever spare seats the Tesla has left.
 const calculateScore = (extraDistance, availableSeats) => {
   return 100 - extraDistance * 5 + availableSeats * 2;
 };

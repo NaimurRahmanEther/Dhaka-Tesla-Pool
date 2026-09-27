@@ -2,13 +2,11 @@ const graphService = require("../graph/graph.service");
 
 const MAX_DETOUR_DISTANCE = 2;
 
-// Calculate detour
 
 const calculateDetour = (oldDistance, newDistance) => {
   return newDistance - oldDistance;
 };
 
-// Check detour limit
 
 const isDetourAcceptable = (oldDistance, newDistance) => {
   const detour = calculateDetour(oldDistance, newDistance);
@@ -16,8 +14,6 @@ const isDetourAcceptable = (oldDistance, newDistance) => {
   return detour <= MAX_DETOUR_DISTANCE;
 };
 
-// Drop stops the Tesla already makes, so a matching pickup and destination
-// cannot produce a route like [1, 1, 2, 3, 3].
 const collapseConsecutiveDuplicates = (route) => {
   const collapsed = [];
 
@@ -30,7 +26,6 @@ const collapseConsecutiveDuplicates = (route) => {
   return collapsed;
 };
 
-// Generate possible routes
 
 const generateInsertionRoutes = (
   currentRoute,
@@ -39,8 +34,7 @@ const generateInsertionRoutes = (
   keepDestination = false,
 ) => {
   const routes = [];
-  // The car must start where it is. Keep the driver's selected destination
-  // last, and always insert the new pickup before its drop-off.
+  // Keep the start and selected destination fixed; insert pickup before drop-off.
   const end = currentRoute.length - (keepDestination ? 1 : 0);
   for (let i = 1; i <= end; i++) {
     const withPickup = [
@@ -58,7 +52,6 @@ const generateInsertionRoutes = (
   return routes;
 };
 
-// Calculate complete route distance
 
 const calculateRouteDistance = async (route) => {
   let distance = 0;
@@ -76,7 +69,6 @@ const calculateRouteDistance = async (route) => {
   return distance;
 };
 
-// Find optimized route
 
 const findBestRoute = async ({ currentRoute, pickup, destination, keepDestination = false }) => {
   const possibleRoutes = generateInsertionRoutes(

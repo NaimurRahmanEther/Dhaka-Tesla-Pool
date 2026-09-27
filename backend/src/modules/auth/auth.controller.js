@@ -16,7 +16,7 @@ const login = asyncHandler(async (req, res) => {
   );
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
-    // Must be true behind HTTPS or the browser will never send the cookie back.
+    // Production refresh cookies require HTTPS.
     secure: env.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,

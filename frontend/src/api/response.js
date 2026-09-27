@@ -1,5 +1,4 @@
-// An HTTP 200 alone is not confirmation: an incorrectly routed API request
-// can return the SPA's index.html instead of creating an account.
+// Reject SPA HTML or malformed payloads even when HTTP status is 200.
 export async function readApiPayload(response) {
   let payload
   try {

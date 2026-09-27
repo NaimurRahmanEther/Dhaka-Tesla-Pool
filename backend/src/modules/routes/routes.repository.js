@@ -1,7 +1,6 @@
 const pool = require("../../database/db");
 const AppError = require("../../utils/AppError");
 
-// Save driver calculated route
 
 const createDriverRoute = async ({
   driverId,
@@ -55,7 +54,6 @@ const createDriverRoute = async ({
   }
 };
 
-// Get latest driver route
 
 const findRouteByDriverId = async (driverId) => {
   const result = await pool.query(
@@ -72,7 +70,7 @@ const findRouteByDriverId = async (driverId) => {
   return result.rows[0];
 };
 
-// A completed trip consumes its plan; the driver manually plans the next one.
+// Completed trips consume their plans; drivers must plan the next route.
 const findAvailableRoute = async (driverId, locationId) => {
   const result = await pool.query(
     `
@@ -88,7 +86,6 @@ const findAvailableRoute = async (driverId, locationId) => {
   return result.rows[0];
 };
 
-// Get driver current location
 
 const findDriverLocation = async (driverId) => {
   const result = await pool.query(

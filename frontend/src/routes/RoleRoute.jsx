@@ -4,10 +4,6 @@ import { Spinner } from '@/components/ui'
 import useAuth from '@/hooks/useAuth'
 import { dashboardPathFor } from '@/routes/dashboardPath'
 
-// Blocks the wrong role from a page and sends them to their own dashboard:
-// a PASSENGER typing a driver URL by hand lands on the passenger home, not a
-// forbidden page. role is compared against the role the backend put on the
-// user object - the one source of truth.
 export default function RoleRoute({ role, children }) {
   const { checking, user } = useAuth()
 

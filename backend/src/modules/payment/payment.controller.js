@@ -17,8 +17,6 @@ const makePayment = asyncHandler(async (req, res) => {
     throw new AppError("Ride not found", 404);
   }
 
-  // A passenger may only pay for their own ride; the role check alone would let
-  // any passenger settle anybody else's fare.
   if (ride.passenger_id !== req.user.id) {
     throw new AppError("You cannot pay for another passenger's ride", 403);
   }

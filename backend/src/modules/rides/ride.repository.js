@@ -1,6 +1,5 @@
 const pool = require("../../database/db");
 
-// Create ride request
 
 const createRide = async ({
   passengerId,
@@ -30,8 +29,6 @@ const createRide = async ({
 
     const ride = result.rows[0];
 
-    // The opening event of the audit trail. Without it a ride's history starts
-    // mid-story and cannot explain how the request came about.
     await client.query(
       `
         INSERT INTO ride_history (ride_id, actor_id, action)
@@ -52,7 +49,6 @@ const createRide = async ({
   }
 };
 
-// Get passenger rides
 
 const findRidesByPassengerId = async (passengerId) => {
   const result = await pool.query(
@@ -79,7 +75,6 @@ const findRidesByPassengerId = async (passengerId) => {
   return result.rows;
 };
 
-// Find single ride
 
 const findRideById = async (id) => {
   const result = await pool.query(
@@ -94,7 +89,6 @@ const findRideById = async (id) => {
   return result.rows[0];
 };
 
-// Cancel ride transaction
 
 const cancelRide = async ({ rideId, actorId }) => {
   const client = await pool.connect();
@@ -151,8 +145,6 @@ const cancelRide = async ({ rideId, actorId }) => {
   }
 };
 
-// Is this ride being served by one of the driver's pools? Used to authorise
-// reads of a ride's timeline.
 const isRideInDriverPool = async (rideId, driverId) => {
   const result = await pool.query(
     `

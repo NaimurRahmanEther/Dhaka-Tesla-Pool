@@ -18,7 +18,6 @@ router.post(
   controller.makePayment,
 );
 
-// Payment history for the signed-in passenger
 router.get(
   "/my",
   authMiddleware,

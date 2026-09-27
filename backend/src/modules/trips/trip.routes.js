@@ -6,7 +6,6 @@ const authMiddleware = require("../../middleware/auth.middleware");
 
 const roleMiddleware = require("../../middleware/role.middleware");
 
-// Driver active trip
 
 router.get(
   "/my-active",
@@ -15,7 +14,6 @@ router.get(
   controller.getActiveTrip,
 );
 
-// Driver arrived at pickup
 
 router.patch(
   "/:poolId/arrive",
@@ -24,7 +22,6 @@ router.patch(
   controller.arriveTrip,
 );
 
-// Start trip
 
 router.patch(
   "/:poolId/start",
@@ -33,7 +30,6 @@ router.patch(
   controller.startTrip,
 );
 
-// Complete trip
 
 router.patch(
   "/:poolId/complete",

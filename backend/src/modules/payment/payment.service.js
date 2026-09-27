@@ -10,8 +10,7 @@ const makePayment = async ({ ride, method }) => {
     throw new AppError("Ride must be completed before payment", 400);
   }
 
-  // One settled payment per ride. Without this the endpoint could be called
-  // twice and produce two PAID rows for the same fare.
+  // Reject an existing settled payment before creating another record.
   const existing = await paymentRepository.getPaymentByRideId(ride.id);
 
   if (existing && existing.status === "PAID") {

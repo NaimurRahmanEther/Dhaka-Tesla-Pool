@@ -1,7 +1,7 @@
 import { fareRows, formatTaka } from '@/lib/format'
 import { Icon } from '@/components/ui'
 
-// All line items come from the server; the browser never recalculates fares.
+// Render stored server fares without recalculating them.
 export default function FareBreakdown({ breakdown }) {
   const rows = fareRows(breakdown)
   if (!rows.length) return null
