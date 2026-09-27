@@ -1,4 +1,4 @@
-// Decorative illustration only; this is not a live map or a suggested route.
+// Decorative illustration; not a live map.
 export default function RouteArt({ className = '' }) {
   return (
     <svg viewBox="0 0 520 420" fill="none" aria-hidden="true" className={className}>

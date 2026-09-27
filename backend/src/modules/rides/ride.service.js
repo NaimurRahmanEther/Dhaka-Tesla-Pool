@@ -7,7 +7,6 @@ const AppError = require("../../utils/AppError");
 
 const { RIDE_STATUS, isCancellable } = require("./rideStatus");
 
-// Create ride request
 
 const createRide = async (passengerId, data) => {
   if (data.pickupLocationId === data.destinationLocationId) {
@@ -34,13 +33,11 @@ const createRide = async (passengerId, data) => {
   });
 };
 
-// Get passenger rides
 
 const getMyRides = async (passengerId) => {
   return rideRepository.findRidesByPassengerId(passengerId);
 };
 
-// Cancel ride
 
 const cancelRide = async (passengerId, rideId) => {
   const ride = await rideRepository.findRideById(rideId);
@@ -53,8 +50,7 @@ const cancelRide = async (passengerId, rideId) => {
     throw new AppError("You cannot cancel this ride", 403);
   }
 
-  // A passenger may cancel while the ride has not departed yet. Once the driver
-  // is on the way the seats are committed and the status must not move.
+  // Allow cancellation only before driver arrival.
   if (!isCancellable(ride.status)) {
     throw new AppError(
       `Ride cannot be cancelled once it is ${ride.status}`,
@@ -68,8 +64,6 @@ const cancelRide = async (passengerId, rideId) => {
   });
 };
 
-// Ride timeline, readable by the requesting passenger and the serving driver
-// only: the trail names both of them, so it is not public.
 
 const getRideTimeline = async (rideId, userId, role) => {
   const ride = await rideRepository.findRideById(rideId);

@@ -4,8 +4,7 @@ const pool = require("../../database/db");
 
 const AppError = require("../../utils/AppError");
 
-// Check out a pool for a driver-side action. Ownership and state are answered
-// separately, so a completed own pool is a 409 and not a 403.
+// Check ownership and state separately: forbidden is 403, state conflict is 409.
 const lockOwnedActivePool = async (client, poolId, driverId) => {
   const found = await tripRepository.findPoolWithLock(client, poolId);
 
@@ -27,7 +26,6 @@ const lockOwnedActivePool = async (client, poolId, driverId) => {
   return found;
 };
 
-// Driver view active trip
 
 const getActiveTrip = async (driverId) => {
   const trips = await tripRepository.findActivePoolByDriverId(driverId);
@@ -39,7 +37,6 @@ const getActiveTrip = async (driverId) => {
   return trips;
 };
 
-// Driver arrived
 
 const arriveTrip = async (poolId, driverId) => {
   const client = await pool.connect();
@@ -52,8 +49,6 @@ const arriveTrip = async (poolId, driverId) => {
     const rides = await tripRepository.arriveTrip(client, poolId);
 
     if (!rides.length) {
-      // The rides are not in a state that can arrive yet, so this is a state
-      // conflict and must not be reported as 404.
       throw new AppError(
         "No matched rides to arrive, rides must be MATCHED first",
         409,
@@ -80,7 +75,6 @@ const arriveTrip = async (poolId, driverId) => {
   }
 };
 
-// Start trip
 
 const startTrip = async (poolId, driverId) => {
   const client = await pool.connect();
@@ -93,8 +87,6 @@ const startTrip = async (poolId, driverId) => {
     const rides = await tripRepository.startTrip(client, poolId);
 
     if (!rides.length) {
-      // Starting before arriving skips a lifecycle stage. Reported as a
-      // conflict so the driver is told which step is missing.
       throw new AppError(
         "Trip cannot start yet, the driver must arrive first",
         409,
@@ -121,7 +113,6 @@ const startTrip = async (poolId, driverId) => {
   }
 };
 
-// Complete trip
 
 const completeTrip = async (poolId, driverId) => {
   const client = await pool.connect();
@@ -134,8 +125,6 @@ const completeTrip = async (poolId, driverId) => {
     const rides = await tripRepository.completeTrip(client, poolId);
 
     if (!rides.length) {
-      // Only completes a pool that is under way, and also catches a second
-      // completion, since the rides have left ONGOING.
       throw new AppError(
         "Trip cannot complete, it has not started or is already completed",
         409,

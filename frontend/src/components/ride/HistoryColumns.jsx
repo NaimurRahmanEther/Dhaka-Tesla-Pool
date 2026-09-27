@@ -1,7 +1,6 @@
 import { formatDateTime, formatTaka } from '@/lib/format'
 import { Badge } from '@/components/ui'
 
-// Passenger columns: ride_id, status, fare, requested_at, completed_at, pickup, destination
 export const PASSENGER_COLUMNS = [
   {
     key: 'ride_id',
@@ -41,7 +40,6 @@ export const PASSENGER_COLUMNS = [
   },
 ]
 
-// Driver columns: pool_id, model, ride_id, status, fare, passenger, seats, pickup, destination, completed
 export const DRIVER_COLUMNS = [
   {
     key: 'pool_id',

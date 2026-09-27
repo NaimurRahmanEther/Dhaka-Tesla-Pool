@@ -4,15 +4,13 @@ const { buildGraph } = require("./graph.utils");
 
 const { findShortestPath } = require("./dijkstra");
 
-// road_edges is small, so the graph is rebuilt from the database on every
-// lookup. No cache, so an edge edit takes effect on the next request.
+// Rebuild the small graph on each lookup so edge changes take effect immediately.
 const shortestPath = async (start, destination) => {
   const edges = await graphRepository.getRoadEdges();
 
   return findShortestPath(buildGraph(edges), start, destination);
 };
 
-// Driver current location -> Pickup -> Destination
 
 const calculateDriverRoute = async ({
   currentLocationId,
@@ -56,7 +54,6 @@ const calculateRouteDistance = async (route) => {
   return totalDistance;
 };
 
-// Expand ordered stops into the actual path through the seeded road graph.
 const calculateRoutePath = async (stops) => {
   if (!stops.length) return null;
   const path = [stops[0]];

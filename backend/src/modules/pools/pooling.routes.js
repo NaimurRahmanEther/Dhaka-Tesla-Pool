@@ -10,8 +10,6 @@ const validate = require("../../middleware/validate.middleware");
 
 const { addPassengerSchema } = require("./pooling.validation");
 
-// Scoped to PASSENGER so a driver cannot insert a ride into a pool; the
-// service also checks the caller owns the ride.
 router.post(
   "/:poolId/add-passenger",
   authMiddleware,
@@ -20,8 +18,6 @@ router.post(
   controller.addPassengerToPool,
 );
 
-// Driver view pool passengers. Scoped to DRIVER, and the service verifies the
-// caller owns the pool so one driver cannot read another's manifest.
 router.get(
   "/:poolId/passengers",
   authMiddleware,

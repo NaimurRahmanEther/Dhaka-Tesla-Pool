@@ -14,7 +14,6 @@ const {
   updateStatusSchema,
 } = require("./vehicle.validation");
 
-// Create Tesla
 
 router.post(
   "/",
@@ -24,7 +23,6 @@ router.post(
   controller.createVehicle,
 );
 
-// Get driver's Tesla
 
 router.get(
   "/me",
@@ -33,7 +31,6 @@ router.get(
   controller.getMyVehicle,
 );
 
-// Online/offline
 
 router.patch(
   "/status",
@@ -43,7 +40,6 @@ router.patch(
   controller.updateStatus,
 );
 
-// Update Tesla information
 
 router.patch(
   "/:id",

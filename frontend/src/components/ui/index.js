@@ -1,5 +1,3 @@
-// Barrel for the kit, so pages write `import { Button, Card } from '@/components/ui'`
-// instead of nine imports. Re-exports components only, which react-refresh accepts.
 export { default as Alert } from '@/components/ui/Alert'
 export { default as Badge } from '@/components/ui/Badge'
 export { default as Button } from '@/components/ui/Button'
