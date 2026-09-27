@@ -1,7 +1,6 @@
 const pool = require("../../database/db");
 
-// Find active pool and lock row. Both tables have `capacity`, so both are
-// aliased - `SELECT *` returned one of the two at random.
+// Alias pool and vehicle capacities to avoid overlapping column names.
 
 const findActivePoolWithLock = async (client, poolId) => {
   const result = await client.query(
@@ -29,7 +28,6 @@ const findActivePoolWithLock = async (client, poolId) => {
   return result.rows[0];
 };
 
-// Calculate occupied seats
 
 const getOccupiedSeats = async (client, poolId) => {
   const result = await client.query(
@@ -48,7 +46,6 @@ const getOccupiedSeats = async (client, poolId) => {
   return Number(result.rows[0].occupied);
 };
 
-// Add passenger ride into pool
 
 const addRideToPool = async (client, { poolId, rideId, seatsAllocated }) => {
   const result = await client.query(
@@ -68,7 +65,6 @@ const addRideToPool = async (client, { poolId, rideId, seatsAllocated }) => {
   return result.rows[0];
 };
 
-// Update optimized pool route
 
 const updatePoolRoute = async (client, { poolId, route }) => {
   const result = await client.query(
@@ -86,8 +82,7 @@ const updatePoolRoute = async (client, { poolId, route }) => {
   return result.rows[0];
 };
 
-// Record the fare and the MATCHED move together, so a ride is never pooled
-// without the fare that was charged for it.
+// Save the fare and MATCHED status in the same transaction.
 const confirmRideInPool = async (
   client,
   { rideId, fare, fareBreakdown = null },
@@ -109,7 +104,6 @@ const confirmRideInPool = async (
   return result.rows[0];
 };
 
-// Find pool owner, used to authorise driver-scoped reads
 const findPoolById = async (poolId) => {
   const result = await pool.query(
     `
@@ -127,7 +121,6 @@ const findPoolById = async (poolId) => {
   return result.rows[0];
 };
 
-// The Tesla behind a pool, for capacity and model.
 const getPoolVehicle = async (poolId) => {
   const result = await pool.query(
     `
@@ -146,7 +139,6 @@ const getPoolVehicle = async (poolId) => {
   return result.rows[0];
 };
 
-// Get pool passengers for driver view
 
 const getPoolPassengers = async (poolId) => {
   const result = await pool.query(

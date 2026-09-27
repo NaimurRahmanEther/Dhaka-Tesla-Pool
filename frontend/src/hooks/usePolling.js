@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-// Refresh quietly while this screen is visible; never poll during a mutation.
+// Poll only while visible and when mutations are not in progress.
 export default function usePolling(reload, enabled = true, interval = 15000) {
   const latest = useRef(reload)
   useEffect(() => {

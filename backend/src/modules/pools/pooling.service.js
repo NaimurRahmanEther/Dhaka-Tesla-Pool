@@ -2,7 +2,6 @@ const pool = require("../../database/db");
 
 const poolingRepository = require("./pooling.repository");
 
-// The route optimiser measures the insertion route and applies the detour limit.
 const { findBestRoute, isDetourAcceptable } = require("./pooling.route.optimizer");
 
 const graphService = require("../graph/graph.service");
@@ -31,7 +30,7 @@ const addPassengerToPool = async ({ poolId, ride }) => {
       poolId,
     );
 
-    // Live capacity from the Tesla, not the pool's opening snapshot.
+    // Use the current vehicle capacity, not the pool snapshot.
     const availableSeats = activePool.vehicle_capacity - occupiedSeats;
 
     if (availableSeats < ride.seats_requested) {
@@ -49,9 +48,10 @@ const addPassengerToPool = async ({ poolId, ride }) => {
     const currentRoute = activePool.current_route;
 
     const bestRoute = await findBestRoute({
-      currentRoute: currentRoute.path,
+      currentRoute: currentRoute.stops ?? currentRoute.path,
       pickup: ride.pickup_location_id,
       destination: ride.destination_location_id,
+      keepDestination: Boolean(currentRoute.driverDestinationId),
     });
 
     if (!bestRoute) {
@@ -92,7 +92,9 @@ const addPassengerToPool = async ({ poolId, ride }) => {
     const updatedPool = await poolingRepository.updatePoolRoute(client, {
       poolId,
       route: {
-        path: bestRoute.route,
+        path: bestRoute.path,
+        stops: bestRoute.route,
+        driverDestinationId: currentRoute.driverDestinationId,
         distance: bestRoute.distance,
       },
     });
@@ -115,11 +117,8 @@ const addPassengerToPool = async ({ poolId, ride }) => {
   }
 };
 
-// Get passengers inside pool
 
 const getPoolPassengers = async (poolId, driverId) => {
-  // A pool manifest lists every passenger's route and fare, so it is only
-  // readable by the driver who owns that Tesla.
   const poolRow = await poolingRepository.findPoolById(poolId);
 
   if (!poolRow) {
@@ -137,8 +136,6 @@ const getPoolPassengers = async (poolId, driverId) => {
     0,
   );
 
-  // Capacity and model come from the Tesla, so a freshly opened pool with no
-  // passengers yet still answers instead of 404.
   const vehicle = await poolingRepository.getPoolVehicle(poolId);
 
   const capacity = vehicle ? vehicle.capacity : poolRow.capacity;

@@ -14,13 +14,11 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
   if (type !== "Bearer" || !token) {
     throw new AppError("Invalid authorization format", 401);
   }
-  // Check blacklist
   const blacklisted = await repository.isTokenBlacklisted(token);
   if (blacklisted) {
     throw new AppError("Token has been revoked", 401);
   }
-  // Verify access token. jsonwebtoken errors carry no statusCode, so without
-  // this they would surface as a 500 instead of a 401.
+  // Return 401 for invalid or expired JWTs.
   let decoded;
   try {
     decoded = jwt.verify(token, env.JWT_ACCESS_SECRET);
@@ -32,7 +30,6 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
 
     throw new AppError(message, 401);
   }
-  // Attach authenticated user
   req.user = decoded;
   next();
 });

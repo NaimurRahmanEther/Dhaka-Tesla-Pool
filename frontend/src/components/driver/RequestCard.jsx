@@ -1,9 +1,11 @@
 import { Badge, Button, Card, Icon } from '@/components/ui'
 import RouteSummary from '@/components/ride/RouteSummary'
+import TripRoute from '@/components/ride/TripRoute'
 import { formatDateTime } from '@/lib/format'
 
 export default function RequestCard({ request, onAccept, accepting, acceptBlocked }) {
   const takeable = request.detourAcceptable && request.fitsInMyTesla
+  const canChangeRoute = request.canChangeRoute && request.fitsInMyTesla
   return (
     <Card className="flex flex-col">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
@@ -43,15 +45,36 @@ export default function RequestCard({ request, onAccept, accepting, acceptBlocke
         </p>
       )}
       <div className="mt-auto pt-6">
-        <Button
-          full
-          loading={accepting}
-          disabled={!takeable || acceptBlocked}
-          onClick={() => onAccept(request)}
-        >
-          {accepting ? 'Accepting ride…' : 'Accept this ride'}
-          {!accepting && <Icon name="arrow" />}
-        </Button>
+        {canChangeRoute && !takeable ? (
+          <>
+            <div className="mb-5 rounded-xl bg-brand-50 p-4">
+              <h3 className="text-sm font-semibold text-brand-900">Start with a different route</h3>
+              <p className="mt-2 mb-4 text-xs leading-5 text-brand-700">
+                You have no passengers yet. Accepting this request replaces your planned destination with {request.destination_location}.
+                Later passengers must fit this new route.
+              </p>
+              <TripRoute route={request.replacementRoute} />
+            </div>
+            <Button
+              full
+              loading={accepting}
+              disabled={acceptBlocked}
+              onClick={() => onAccept(request, { changeRoute: true })}
+            >
+              Change route and accept <Icon name="route" />
+            </Button>
+          </>
+        ) : (
+          <Button
+            full
+            loading={accepting}
+            disabled={!takeable || acceptBlocked}
+            onClick={() => onAccept(request)}
+          >
+            {accepting ? 'Accepting ride…' : 'Accept this ride'}
+            {!accepting && <Icon name="arrow" />}
+          </Button>
+        )}
       </div>
     </Card>
   )

@@ -4,7 +4,7 @@ import authService from '@/services/auth.service'
 import userService from '@/services/user.service'
 import { setAccessTokenExported } from '@/api/client'
 
-// Access tokens remain in memory. Only the httpOnly refresh cookie restores a session.
+// Restore sessions through the HttpOnly refresh cookie; keep access tokens in memory.
 export default function AuthProvider({ children }) {
   const [token, setToken] = useState(null)
   const [user, setUser] = useState(null)
@@ -59,7 +59,7 @@ export default function AuthProvider({ children }) {
     try {
       await authService.logout()
     } catch {
-      /* Always clear local state. */
+      // Always clear local state.
     }
     setAccessTokenExported(null)
     setToken(null)

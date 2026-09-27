@@ -6,7 +6,6 @@ const authMiddleware = require("../../middleware/auth.middleware");
 
 const roleMiddleware = require("../../middleware/role.middleware");
 
-// Passenger ride history
 
 router.get(
   "/passenger",
@@ -15,7 +14,6 @@ router.get(
   controller.getPassengerHistory,
 );
 
-// Driver trip history
 
 router.get(
   "/driver",

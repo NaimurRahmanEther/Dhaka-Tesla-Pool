@@ -4,7 +4,6 @@ const asyncHandler = require("../../middleware/asyncHandler");
 
 const successResponse = require("../../utils/response");
 
-// Driver active trip
 
 const getActiveTrip = asyncHandler(async (req, res) => {
   const driverId = req.user.id;
@@ -12,7 +11,6 @@ const getActiveTrip = asyncHandler(async (req, res) => {
   return successResponse(res, 200, "Active trip fetched successfully", result);
 });
 
-// Driver arrived
 
 const arriveTrip = asyncHandler(async (req, res) => {
   const poolId = Number(req.params.poolId);
@@ -21,7 +19,6 @@ const arriveTrip = asyncHandler(async (req, res) => {
   return successResponse(res, 200, "Driver arrived successfully", result);
 });
 
-// Start trip
 
 const startTrip = asyncHandler(async (req, res) => {
   const poolId = Number(req.params.poolId);
@@ -30,7 +27,6 @@ const startTrip = asyncHandler(async (req, res) => {
   return successResponse(res, 200, "Trip started successfully", result);
 });
 
-// Complete trip
 
 const completeTrip = asyncHandler(async (req, res) => {
   const poolId = Number(req.params.poolId);

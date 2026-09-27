@@ -13,7 +13,7 @@ import {
   Spinner,
 } from '@/components/ui'
 import useApi from '@/hooks/useApi'
-import usePolling from '@/hooks/usePolling'
+import TripRoute from '@/components/ride/TripRoute'
 import matchingService from '@/services/matching.service'
 
 export default function RequestsPage() {
@@ -23,7 +23,6 @@ export default function RequestsPage() {
   const [error, setError] = useState(null)
   const [query, setQuery] = useState('')
   const [fitsOnly, setFitsOnly] = useState(false)
-  usePolling(requests.reload, !accepting && !requests.error, 10000)
   const filtered = (requests.data ?? []).filter(
     (r) =>
       (!fitsOnly || (r.fitsInMyTesla && r.detourAcceptable)) &&
@@ -31,11 +30,11 @@ export default function RequestsPage() {
         .toLowerCase()
         .includes(query.toLowerCase()),
   )
-  async function accept(request) {
+  async function accept(request, options) {
     setAccepting(request.id)
     setError(null)
     try {
-      setResult(await matchingService.acceptRequest(request.id))
+      setResult(await matchingService.acceptRequest(request.id, options))
       requests.reload()
     } catch (err) {
       setError(err.message)
@@ -71,7 +70,9 @@ export default function RequestsPage() {
                 Ride #{result.assignment.ride.id} is coming along.
               </h2>
               <p className="mt-2 text-sm text-slate-500">
-                {result.pooled
+                {result.routeChanged
+                  ? 'Your route now follows this passenger’s pickup and destination.'
+                  : result.pooled
                   ? 'This passenger joined your existing pool.'
                   : 'Your new pool is ready.'}
               </p>
@@ -86,6 +87,10 @@ export default function RequestsPage() {
           </div>
           <div className="mt-5 max-w-md">
             <FareBreakdown breakdown={result.fareBreakdown} />
+          </div>
+          <div className="mt-6 border-t border-slate-100 pt-5">
+            <h3 className="mb-5 font-semibold text-brand-900">Updated trip route</h3>
+            <TripRoute route={result.route} />
           </div>
           <LinkButton to="/active-trip" className="mt-5">
             Open active trip <Icon name="arrow" />
@@ -138,7 +143,7 @@ export default function RequestsPage() {
           </div>
           <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
             <Icon name="refresh" className="h-3 w-3" />
-            Refreshes automatically while you’re here.
+            Use Refresh to check for passenger requests.
           </p>
           {requests.loading && requests.data === null ? (
             <div className="py-16">

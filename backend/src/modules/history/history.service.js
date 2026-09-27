@@ -1,7 +1,6 @@
 const historyRepository = require("./history.repository");
 
-// An empty history is a normal state for a new account, so it returns an empty
-// list rather than a 404. The frontend can then render "no rides yet".
+// Return an empty list for accounts without history.
 const getPassengerHistory = async (passengerId) => {
   return historyRepository.findPassengerHistory(passengerId);
 };

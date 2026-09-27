@@ -8,7 +8,6 @@ const rideRepository = require("../rides/ride.repository");
 
 const AppError = require("../../utils/AppError");
 
-// Add passenger to pool
 
 const addPassengerToPool = asyncHandler(async (req, res) => {
   const poolId = Number(req.params.poolId);
@@ -17,7 +16,6 @@ const addPassengerToPool = asyncHandler(async (req, res) => {
   if (!ride) {
     throw new AppError("Ride not found", 404);
   }
-  // A passenger may only add their own unclaimed ride to a pool.
   if (ride.passenger_id !== req.user.id) {
     throw new AppError("You cannot add another passenger's ride", 403);
   }
@@ -36,7 +34,6 @@ const addPassengerToPool = asyncHandler(async (req, res) => {
   );
 });
 
-// Get pool passengers for driver
 
 const getPoolPassengers = asyncHandler(async (req, res) => {
   const poolId = Number(req.params.poolId);
