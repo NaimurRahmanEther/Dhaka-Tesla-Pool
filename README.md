@@ -280,7 +280,61 @@ test -f backend/.env || cp backend/.env.example backend/.env
 test -f frontend/.env.local || cp frontend/.env.example frontend/.env.local
 ```
 
-Set `DB_HOST=localhost`, use your PostgreSQL credentials, and replace both JWT placeholders in `backend/.env`. Keep the frontend API URL at `http://localhost:8000` for this setup.
+**Environment variables** (copy `.env.example` → `.env`):
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `DB_HOST` | yes | PostgreSQL host |
+| `DB_NAME` | yes | Database name (must exist) |
+| `DB_USER` | yes | PostgreSQL user |
+| `DB_PASSWORD` | yes | PostgreSQL password |
+| `DB_SSL` | no | Set `true` for Neon TLS with certificate verification; default `false` for local PostgreSQL. |
+| `JWT_ACCESS_SECRET` | yes | Signs access tokens |
+| `JWT_REFRESH_SECRET` | yes | Signs refresh tokens |
+| `DB_PORT` | no | Default 5432 |
+| `PORT` | no | Default 8000 |
+| `CORS_ORIGIN` | no | Default `http://localhost:5173` |
+| `ACCESS_TOKEN_EXPIRE` | no | Default `15m` |
+| `REFRESH_TOKEN_EXPIRE` | no | Default `7d` |
+| `NODE_ENV` | no | `development` \| `production` |
+
+> The two signing secrets **must be different**. They sign access/refresh tokens independently; a shared key would let a refresh token be replayed as an access token.
+
+For Neon, add your database credentials to `backend/.env` and set `DB_SSL=true`.
+This verifies TLS certificates and enables channel binding when offered. Never commit `.env`.
+
+---
+
+## Features
+
+### Passenger (Nusrat, Rafiq, Shirin)
+- **Sign up / in** — `POST /auth/register`, `POST /auth/login`
+- **Request ride** — Pickup, Destination, Seats (`POST /rides`)
+- **See estimated fare** — `NULL` on REQUESTED; computed at match
+- **Track status** — Waiting → Matched → In Progress → Completed/Cancelled
+- **View history** — All rides with timeline (`GET /history/passenger`)
+- **Cancel when valid** — Only while REQUESTED or MATCHED (`PATCH /rides/:id/cancel`)
+
+### Driver (Jashim)
+- **Sign in**
+- **Go online/offline** — `PATCH /vehicle/status`
+- **Own Tesla with fixed capacity** — `POST /vehicle`, `GET /vehicle/me`
+- **See relevant requests** — Board shows detour, free seats, fit (`GET /matching/requests`)
+- **Accept ride/pool** — `POST /matching/:rideId/accept`
+- **Mark Arrival / Start / Complete** — `PATCH /trips/:poolId/arrive|start|complete`
+- **See passengers/seats** — Manifest with fares (`GET /pool/:poolId/passengers`)
+- **Ride history** — Completed trips with fares (`GET /history/driver`)
+
+### Pool / Ride
+- Multiple requests share one Tesla
+- Occupied seats never exceed capacity (enforced by `SELECT ... FOR UPDATE`)
+- Each passenger gets individual fare (210 solo vs 170 pooled)
+- Clear pool membership and lifecycle
+
+### Fare Model
+```
+passengerFare = baseFare + distanceCharge - poolDiscount
+```
 
 ### 2. Create the database
 
@@ -509,3 +563,4 @@ AI assistance was used as an engineering aid during implementation and documenta
 | ChatGPT | Implementation questions, help investigating/fixing bugs, and project documentation. |
 
 
+MIT — use freely for learning or as a starter for your own ride-pooling service.

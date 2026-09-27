@@ -9,6 +9,7 @@ const env = {
     NAME: process.env.DB_NAME,
     USER: process.env.DB_USER,
     PASSWORD: process.env.DB_PASSWORD,
+    SSL: process.env.DB_SSL === "true",
   },
   JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET,
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET,
