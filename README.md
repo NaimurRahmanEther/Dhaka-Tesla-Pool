@@ -21,6 +21,7 @@ The project demonstrates graph-based routing, pickup/drop-off insertion, role-ba
 - [Docker setup](#docker-setup)
 - [Migrations and seeds](#migrations-and-seeds)
 - [Demo credentials and walkthrough](#demo-credentials-and-walkthrough)
+- [Tests and verification](#tests-and-verification)
 - [Deployment URL and deployment notes](#deployment-url-and-deployment-notes)
 - [API overview](#api-overview)
 - [Key decisions and trade-offs](#key-decisions-and-trade-offs)
@@ -28,7 +29,7 @@ The project demonstrates graph-based routing, pickup/drop-off insertion, role-ba
 - [Next improvements](#next-improvements)
 - [AI Usage](#ai-usage)
 
-This README is the central guide to the application, setup, architecture, and operating workflows.
+The [technical reference](DOCUMENTATION.md) contains the complete endpoint table, request examples, routing rules, fare calculations, database notes, and troubleshooting. [Frontend documentation](frontend/README.md) explains the client implementation.
 
 ## Problem statement
 
@@ -45,13 +46,13 @@ This project models that problem using a small road graph of Dhaka. A booking mu
 | Driver vehicle | Register one vehicle through the normal application flow, edit its details, set current location, and switch online/offline. |
 | Driver route planning | Calculate and save a route from a selected current location to a destination. Planning a replacement route is blocked while a pool is active. |
 | Matching | Show drivers waiting requests with seat availability and route compatibility. Drivers can accept a specific request; a separate API endpoint supports automatic candidate ranking. |
-| First-passenger route change | When a request does not fit an unused plan, preview and explicitly accept a replacement route. Later passengers must fit the shared route's detour limit. |
+| First-passenger route change | The driver can accept any reachable first passenger's route with enough available seats, using **Change route and accept** when it does not fit the original plan. From the second passenger onward, acceptance depends on the extra distance compared with the current shared route. |
 | Pooling | Insert pickup/drop-off stops, enforce the 2 km incremental detour rule, and check seats in a database transaction. Passengers can also join an existing pool using its number. |
 | Trip management | Driver actions move eligible rides through arrival, start, and completion. The active-trip screen includes a passenger manifest, occupancy, and full shared route. |
 | Fares | Store and display base fare, distance charge, pool discount, and total in whole BDT. Calculation uses the passenger's own shortest-path distance. |
 | Payments and history | Record `CASH` or `TESLA_WALLET` as a simulated payment for a completed ride; view payment records, passenger history, and completed driver trips. |
 | Interface | Responsive role-specific navigation, shared controls, search/filtering, loading/error/empty states, password visibility, action confirmations, and manual Refresh controls. |
-| Operations | Database-aware health endpoint, SQL migrations, repeatable reference-data seeds, and Docker Compose. |
+| Operations | Database-aware health endpoint, SQL migrations, repeatable reference-data seeds, Docker Compose, and unit/integration test scripts. |
 
 The normal ride lifecycle is:
 
@@ -62,6 +63,25 @@ REQUESTED -> MATCHED -> DRIVER_ARRIVED -> ONGOING -> COMPLETED
 ```
 
 Cancellation is available only in `REQUESTED` or `MATCHED`. Creating a request does not automatically dispatch a driver. An acceptance or explicit pool join confirms the fare and assignment.
+
+### First request versus later requests
+
+For the **first ride request accepted into a new pool**, the driver can choose any reachable pickup and destination, provided the vehicle has enough seats. If the request does not fit the driver's original plan, **Change route and accept** explicitly replaces that plan with a route serving the first passenger. The original plan's 2 km detour limit does not prevent this explicit replacement.
+
+For the **second and each later ride request**, the backend inserts the new passenger's pickup and drop-off into the current shared route and compares the total distances:
+
+```text
+Extra distance = proposed shared-route distance - current shared-route distance
+```
+
+| Distance difference | Acceptance |
+| --- | --- |
+| At most 2 km | Allowed if enough seats are available and a valid route exists. |
+| More than 2 km | Rejected because the new passenger adds too much travel distance. |
+
+For example, if the current shared route is **8 km**, a second request producing a **10 km** route adds **2 km** and can be accepted. A request producing an **11 km** route adds **3 km** and is rejected. This compares the full shared route, not just the new passenger's individual travel distance.
+
+After each acceptance, the updated route becomes the baseline for the next request. The driver cannot use **Change route and accept** to bypass this limit once a pool is active.
 
 ## Screenshots
 
@@ -102,7 +122,7 @@ These images are supplied in [`docs/screenshots`](docs/screenshots). They show t
 
 </details>
 
-The optional `node docs/capture-screenshots.mjs` command runs from the repository root with the Docker frontend on port `5173`, its `/api` proxy, and the API on port `8000`. It requires Node 22.13+ or 24 and Chrome/Edge (`CHROME_PATH` overrides the browser executable). Use a disposable seeded local database with no active demo-driver trip: the script creates demo data, overwrites the six screenshots, completes a demo trip, and takes the driver offline. A failed capture can leave a partially advanced trip.
+See [screenshot reproduction](DOCUMENTATION.md#screenshot-reproduction) before running the supplied capture script: it creates demo data and advances a trip.
 
 ## Architecture
 
@@ -131,7 +151,7 @@ The supplied ERD shows the 12 application tables. The migration runner also crea
 | `payments` | Recorded payment amount, method, and status for a passenger's ride. |
 | `refresh_tokens`, `token_blacklist` | Stored refresh sessions and revoked token records. |
 
-Relationships are enforced with foreign keys. `pool_rides` is the pool-to-ride association; `(pool_id, ride_id)` is unique. This does **not** enforce that a ride can belong to only one pool across concurrent requests. Additional integrity gaps are documented under [known limitations](#known-limitations).
+Relationships are enforced with foreign keys. `pool_rides` is the pool-to-ride association; `(pool_id, ride_id)` is unique. This does **not** enforce that a ride can belong to only one pool across concurrent requests. Additional integrity gaps are documented under [known limitations](#known-limitations) and in the [database reference](DOCUMENTATION.md#database-details).
 
 ## Tech stack
 
@@ -143,7 +163,7 @@ Versions below describe the repository's package declarations and Docker images.
 | Backend | Node.js, CommonJS JavaScript, Express 5.2, `pg` 8.23 |
 | Validation and auth | Zod 4.6, bcrypt 6, jsonwebtoken 9, cookie-parser, CORS |
 | Persistence | PostgreSQL 16, handwritten SQL migrations, JSONB route/fare snapshots |
-| Linting | ESLint 10 |
+| Testing and lint | Node's built-in test runner, `node:assert`, ESLint 10 |
 | Containers | Docker Compose, Node 20 Alpine images, PostgreSQL 16 Alpine, Nginx Alpine |
 
 The application uses browser `fetch` and local UI components. There is no ORM, external mapping service, payment gateway, or Tesla SDK in the dependency list.
@@ -153,13 +173,16 @@ The application uses browser `fetch` and local UI components. There is no ORM, e
 ```text
 dhaka-tesla-pool/
 |-- README.md                       Project overview and operating guide
+|-- DOCUMENTATION.md                API and engineering reference
 |-- docker-compose.yml              PostgreSQL, backend, frontend services
 |-- backend/
 |   |-- .env.example                Safe configuration template
 |   |-- Dockerfile                  Migrate, seed, then start the API
 |   |-- package.json                Backend commands and dependencies
 |   |-- scripts/
-|   |   `-- create-demo-accounts.js  Local demo account registration
+|   |   |-- create-demo-accounts.js  Local demo account registration
+|   |   `-- verify-route-flow.js     Isolated-schema integration check
+|   |-- test/routes.test.js         Routing and matching regression tests
 |   `-- src/
 |       |-- app.js                  Express routes and middleware
 |       |-- server.js               DB check and HTTP listener
@@ -174,6 +197,7 @@ dhaka-tesla-pool/
 |   |-- .env.example                Public API base URL template
 |   |-- Dockerfile                  Vite build and Nginx runtime
 |   |-- nginx.conf                  SPA fallback and /api proxy
+|   |-- test/api-response.test.js   API response parsing regression tests
 |   `-- src/
 |       |-- api/                    Shared fetch client and response parser
 |       |-- context/                Auth provider and context
@@ -193,9 +217,9 @@ dhaka-tesla-pool/
 ## Prerequisites
 
 - For local development: Node.js and npm, PostgreSQL 16, and Git. Node 24 is the version used for the checks below. The locked frontend tools require Node `20.19+`, `22.13+`, or `24+` on their respective supported major lines; the backend alone declares `>=20`.
-- For the full container setup: Docker with the Compose plugin and a running engine. Host Node/PostgreSQL installations are unnecessary unless running host-side utility scripts.
+- For the full container setup: Docker with the Compose plugin and a running engine. Host Node/PostgreSQL installations are unnecessary unless running host-side utility scripts or tests.
 - Available ports: `5173` for the frontend, `8000` for the API, and `5432` for PostgreSQL. Vite fails if `5173` is occupied.
-- For optional screenshot capture: Node 22.13+ or Node 24, Chrome/Edge, and the Docker-style `/api` proxy described in the Docker setup below.
+- For optional screenshot capture: Node 22.13+ or Node 24, Chrome/Edge, and the Docker-style `/api` proxy described in the technical reference.
 
 ## Environment variables
 
@@ -385,6 +409,26 @@ Use separate browser profiles or a normal/private window for the driver and pass
 
 For a separate cancellation demonstration, cancel a waiting or matched ride before driver arrival. See the cancellation limitations below before cancelling every passenger in an active pool.
 
+## Tests and verification
+
+Run from the indicated package directory:
+
+| Directory | Command | Coverage/purpose |
+| --- | --- | --- |
+| `backend/` | `npm test` | 12 routing/matching regression tests using mocked repositories and the real route algorithms; no running database required. |
+| `backend/` | `npm run test:routes:integration` | Real PostgreSQL/HTTP route flow, concurrent accepts, pool join, lifecycle, and explicit route replacement. |
+| `frontend/` | `npm test` | 4 API response-parser regressions, including preventing HTML responses from being treated as successful registration. |
+| `frontend/` | `npm run lint` | ESLint, React hooks, and React refresh rules. |
+| `frontend/` | `npm run build` | Vite production compilation into `dist/`. |
+
+The integration script uses `backend/.env`, creates a unique `route_test_*` schema, starts Express on an ephemeral loopback port, and removes the schema in `finally`. It needs an existing reachable database and a role allowed to create/drop its own schema. It runs its own migrations and fixture data; a separately running API is unnecessary. A host-run script needs `DB_HOST=localhost`, even when PostgreSQL is published from Docker.
+
+The production backend image copies `src/` only, so its `npm test` does not provide the repository's test suite and its integration script is absent. Run tests from the host checkout with dependencies installed.
+
+**Documentation verification, 27 September 2026:** backend tests **12/12 passed**, frontend tests **4/4 passed**, frontend lint passed, and frontend production build passed on Node `24.14.0`. Compose configuration validation completed. The database integration check could not run to completion because the host process could not resolve `postgres`; the Docker engine was unavailable in this session, so container startup was not reverified. The supplied screenshots were inspected, not regenerated.
+
+These checks are focused regressions, not complete browser, payment, auth, security, or load-test coverage.
+
 ## Deployment URL and deployment notes
 
 **Public deployment URL: not yet provided by the project owner.** No public deployment address was found in the application configuration inspected for this documentation. The addresses below are local development/demo URLs, not a hosted deployment.
@@ -397,7 +441,7 @@ For a separate cancellation demonstration, cancel a waiting or matched ride befo
 
 The included Compose file runs the complete application on one machine. Hosting it requires configuring the actual domain, HTTPS termination, secrets, and persistent storage. Use `NODE_ENV=production`, set `CORS_ORIGIN` to the public frontend origin, replace demonstration credentials, and protect database access. The refresh cookie becomes Secure in production, so the browser-facing deployment needs HTTPS.
 
-A single public origin with `/api` forwarding matches the supplied Nginx configuration and the `SameSite=Lax` cookie. A frontend and API on different sites require revisiting cookie/CORS settings. Separately hosting the frontend also requires setting `VITE_API_URL` **before** the production build. The repository does not include TLS certificates, a managed-database SSL configuration, or an automated deployment pipeline.
+A single public origin with `/api` forwarding matches the supplied Nginx configuration and the `SameSite=Lax` cookie. A frontend and API on different sites require revisiting cookie/CORS settings. Separately hosting the frontend also requires setting `VITE_API_URL` **before** the production build. The repository does not include TLS certificates, a managed-database SSL configuration, or an automated deployment pipeline. See [deployment considerations](DOCUMENTATION.md#deployment-considerations).
 
 ## API overview
 
@@ -419,13 +463,13 @@ Protected requests use `Authorization: Bearer <access-token>`. Login sets the Ht
 | `/history` | Passenger ride history and driver completed-trip history |
 | `/payments` | Passenger payment recording and payment history |
 
-Paths such as `/api/rides` apply only through Nginx; Express itself exposes `/rides`. Endpoint definitions live in each backend module's route file.
+See the [full API reference and payload examples](DOCUMENTATION.md#api-reference). Paths such as `/api/rides` apply only through Nginx; Express itself exposes `/rides`.
 
 ## Key decisions and trade-offs
 
 | Decision | Benefit | Trade-off |
 | --- | --- | --- |
-| Small seeded graph and Dijkstra | Routes are deterministic and can be explained without an external API. | Demonstration distances exclude traffic, one-way roads, GPS, and real ETAs. |
+| Small seeded graph and Dijkstra | Routes are deterministic and can be explained and tested without an external API. | Demonstration distances exclude traffic, one-way roads, GPS, and real ETAs. |
 | Stop insertion with a 2 km incremental limit | Preserves existing stop order and a saved driver destination while allowing sharing. | Optimizes a new insertion, not the globally best ordering of every passenger; cumulative detours can exceed 2 km. |
 | Modular Express service/repository layout | Business rules and SQL remain easy to locate in one deployable API. | Transaction boundaries and repeated queries must be managed explicitly. |
 | PostgreSQL transactions and row locks | Matching rechecks seats and rebuilds the route against the locked pool. | Locks cover a vehicle/pool, but additional cross-vehicle ride-claim guarantees are still needed. |
@@ -444,14 +488,14 @@ Paths such as `/api/rides` apply only through Nginx; Express itself exposes `/ri
 - **Cancellation:** seats are removed, but the pool route is not recomputed and an empty active pool is not closed automatically. Cancelling all its rides can leave the driver unable to complete or replace that pool through the normal UI.
 - **History:** direct passenger pool-join updates the ride but does not add an `ACCEPTED` history event. The standard driver-accept path does record it.
 - **Auth/operations:** refresh tokens are stored as token text, expiry cleanup and refresh rotation are absent, some expiry metadata is hardcoded, and rate limiting/password reset/email verification are not implemented. Startup checks do not validate signing-key strength.
-- **Scale:** no pagination, graph cache, WebSocket updates, or committed CI workflow. The graph is rebuilt from database rows for each shortest-path lookup, including repeated lookups during insertion search.
+- **Scale and verification:** no pagination, graph cache, WebSocket updates, broad end-to-end suite, or committed CI workflow. The graph is rebuilt from database rows for each shortest-path lookup, including repeated lookups during insertion search.
 
 ## Next improvements
 
-1. Make ride claiming, fare persistence, and lifecycle checks atomic across all booking paths; add database constraints to protect against duplicate claims, capacity changes, and duplicate payments.
+1. Make ride claiming, fare persistence, and lifecycle checks atomic across all booking paths; add database constraints and concurrent regression tests for duplicate claims, capacity changes, and payments.
 2. Recalculate routes after cancellation, close empty pools, record join events, and gate new bookings according to trip progress.
-3. Define a consistent pricing policy for multiple seats and first-passenger discounts; add idempotent payment handling before integrating a real provider.
-4. Automate frontend lint and production builds in CI.
+3. Decide and test a consistent pricing policy for multiple seats and first-passenger discounts; add idempotent payment handling before integrating a real provider.
+4. Expand auth, authorization, fare, payment, and browser-flow tests; run them alongside lint/build in CI.
 5. Add configurable production secrets/expiry handling, refresh rotation/cleanup, rate limits, database SSL support, backups, and a controlled migration step.
 6. Add pagination and graph/path caching, then evaluate live updates and real mapping data against the needs of a larger deployment.
 
@@ -461,13 +505,7 @@ AI assistance was used as an engineering aid during implementation and documenta
 
 | Tool | Use |
 | --- | --- |
-| OpenAI Codex | Frontend polishing. For this documentation update, repository inspection, documentation drafting, and linking the existing screenshots/diagrams. |
+| OpenAI Codex | Frontend polishing. For this documentation update, repository inspection, documentation drafting, linking the existing screenshots/diagrams, and running available checks. |
 | ChatGPT | Implementation questions, help investigating/fixing bugs, and project documentation. |
 
-The documentation was checked against routes, services, SQL migrations, package scripts, Docker configuration, and the supplied images. That review distinguishes implemented behavior from future improvements.
 
-**Accepted suggestion — awaiting the project owner's specific example.** Record the actual AI suggestion, where it was incorporated, and why it was useful. The confirmed use of Codex for frontend polish does not establish which individual suggestion was accepted.
-
-**Rejected or changed suggestion — awaiting the project owner's specific example.** Record what the AI proposed, what was rejected or changed, and the engineering reason. This history cannot be inferred reliably from the final source code.
-
-These two entries are intentionally marked pending rather than inventing an AI decision history. They should be completed with the owner's answers before submission. A useful account explains the behavior or trade-off that was evaluated, the final decision, and how it was checked; the amount of AI assistance alone does not demonstrate engineering understanding.
