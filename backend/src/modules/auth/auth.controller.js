@@ -4,6 +4,13 @@ const asyncHandler = require("../../middleware/asyncHandler");
 const AppError = require("../../utils/AppError");
 const env = require("../../config/env");
 
+const refreshCookieOptions = {
+  httpOnly: true,
+  secure: env.NODE_ENV === "production",
+  sameSite: env.NODE_ENV === "production" ? "none" : "lax",
+  path: "/",
+};
+
 const register = asyncHandler(async (req, res) => {
   const user = await authService.register(req.body);
   return successResponse(res, 201, "User registered successfully", user);
@@ -15,10 +22,7 @@ const login = asyncHandler(async (req, res) => {
     req.body.password,
   );
   res.cookie("refreshToken", refreshToken, {
-    httpOnly: true,
-    // Must be true behind HTTPS or the browser will never send the cookie back.
-    secure: env.NODE_ENV === "production",
-    sameSite: "lax",
+    ...refreshCookieOptions,
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
   return successResponse(res, 200, "Login successful", { accessToken });
@@ -37,7 +41,7 @@ const logout = asyncHandler(async (req, res) => {
   const accessToken = req.headers.authorization?.split(" ")[1];
   const refreshToken = req.cookies.refreshToken;
   await authService.logout(accessToken, refreshToken);
-  res.clearCookie("refreshToken");
+  res.clearCookie("refreshToken", refreshCookieOptions);
   return successResponse(res, 200, "Logout successful");
 });
 
