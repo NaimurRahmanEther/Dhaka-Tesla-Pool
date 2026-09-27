@@ -7,6 +7,8 @@ const pool = new Pool({
   database: env.DATABASE.NAME,
   user: env.DATABASE.USER,
   password: env.DATABASE.PASSWORD,
+  ssl: env.DATABASE.SSL ? { rejectUnauthorized: true } : false,
+  enableChannelBinding: env.DATABASE.SSL,
 });
 
 pool.on("connect", () => {

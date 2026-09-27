@@ -94,6 +94,7 @@ npm run dev                 # http://localhost:5173
 | `DB_NAME` | yes | Database name (must exist) |
 | `DB_USER` | yes | PostgreSQL user |
 | `DB_PASSWORD` | yes | PostgreSQL password |
+| `DB_SSL` | no | Set `true` for Neon TLS with certificate verification; default `false` for local PostgreSQL. |
 | `JWT_ACCESS_SECRET` | yes | Signs access tokens |
 | `JWT_REFRESH_SECRET` | yes | Signs refresh tokens |
 | `DB_PORT` | no | Default 5432 |
@@ -104,6 +105,9 @@ npm run dev                 # http://localhost:5173
 | `NODE_ENV` | no | `development` \| `production` |
 
 > The two signing secrets **must be different**. They sign access/refresh tokens independently; a shared key would let a refresh token be replayed as an access token.
+
+For Neon, add your database credentials to `backend/.env` and set `DB_SSL=true`.
+This verifies TLS certificates and enables channel binding when offered. Never commit `.env`.
 
 ---
 
