@@ -54,11 +54,12 @@ const generateInsertionRoutes = (currentRoute, pickup, destination) => {
 
 // Calculate complete route distance
 
-const calculateRouteDistance = async (route) => {
+const calculateRouteDistance = async (route, graph) => {
+  graph = graph ?? await graphService.loadGraph();
   let distance = 0;
 
   for (let i = 0; i < route.length - 1; i++) {
-    const result = await graphService.shortestPath(route[i], route[i + 1]);
+    const result = await graphService.shortestPath(route[i], route[i + 1], graph);
 
     if (!result) {
       return Infinity;
@@ -72,7 +73,8 @@ const calculateRouteDistance = async (route) => {
 
 // Find optimized route
 
-const findBestRoute = async ({ currentRoute, pickup, destination }) => {
+const findBestRoute = async ({ currentRoute, pickup, destination, graph }) => {
+  graph = graph ?? await graphService.loadGraph();
   const possibleRoutes = generateInsertionRoutes(
     currentRoute,
     pickup,
@@ -84,7 +86,7 @@ const findBestRoute = async ({ currentRoute, pickup, destination }) => {
   let minimumDistance = Infinity;
 
   for (const route of possibleRoutes) {
-    const distance = await calculateRouteDistance(route);
+    const distance = await calculateRouteDistance(route, graph);
 
     if (distance < minimumDistance) {
       minimumDistance = distance;

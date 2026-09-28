@@ -4,12 +4,11 @@ const { buildGraph } = require("./graph.utils");
 
 const { findShortestPath } = require("./dijkstra");
 
-// road_edges is small, so the graph is rebuilt from the database on every
-// lookup. No cache, so an edge edit takes effect on the next request.
-const shortestPath = async (start, destination) => {
-  const edges = await graphRepository.getRoadEdges();
+// Reuse one graph within a calculation; new requests see fresh road data.
+const loadGraph = async () => buildGraph(await graphRepository.getRoadEdges());
 
-  return findShortestPath(buildGraph(edges), start, destination);
+const shortestPath = async (start, destination, graph) => {
+  return findShortestPath(graph ?? await loadGraph(), start, destination);
 };
 
 // Driver current location -> Pickup -> Destination
@@ -18,8 +17,10 @@ const calculateDriverRoute = async ({
   currentLocationId,
   pickupLocationId,
   destinationLocationId,
+  graph,
 }) => {
-  const routeToPickup = await shortestPath(currentLocationId, pickupLocationId);
+  graph = graph ?? await loadGraph();
+  const routeToPickup = await shortestPath(currentLocationId, pickupLocationId, graph);
 
   if (!routeToPickup) {
     return null;
@@ -28,6 +29,7 @@ const calculateDriverRoute = async ({
   const routeToDestination = await shortestPath(
     pickupLocationId,
     destinationLocationId,
+    graph,
   );
 
   if (!routeToDestination) {
@@ -40,11 +42,12 @@ const calculateDriverRoute = async ({
   };
 };
 
-const calculateRouteDistance = async (route) => {
+const calculateRouteDistance = async (route, graph) => {
+  graph = graph ?? await loadGraph();
   let totalDistance = 0;
 
   for (let i = 0; i < route.length - 1; i++) {
-    const result = await shortestPath(route[i], route[i + 1]);
+    const result = await shortestPath(route[i], route[i + 1], graph);
 
     if (!result) {
       return Infinity;
@@ -57,6 +60,7 @@ const calculateRouteDistance = async (route) => {
 };
 
 module.exports = {
+  loadGraph,
   shortestPath,
   calculateDriverRoute,
   calculateRouteDistance,

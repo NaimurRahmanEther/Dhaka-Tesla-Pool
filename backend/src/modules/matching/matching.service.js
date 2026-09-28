@@ -19,7 +19,7 @@ const NO_SEAT = "NO_SEAT_AVAILABLE";
 
 // How a Tesla would serve this ride now, or null. Both planners name the stop
 // list differently, so the route is normalised to { path, distance } here.
-const planRoute = async ({ vehicle, activePool, ride }) => {
+const planRoute = async ({ vehicle, activePool, ride, graph }) => {
   const currentRoute = activePool ? activePool.current_route : null;
 
   if (currentRoute && currentRoute.path) {
@@ -27,6 +27,7 @@ const planRoute = async ({ vehicle, activePool, ride }) => {
       currentRoute: currentRoute.path,
       pickup: ride.pickup_location_id,
       destination: ride.destination_location_id,
+      graph,
     });
 
     if (!planned) return null;
@@ -46,6 +47,7 @@ const planRoute = async ({ vehicle, activePool, ride }) => {
     currentLocationId: vehicle.current_location_id,
     pickupLocationId: ride.pickup_location_id,
     destinationLocationId: ride.destination_location_id,
+    graph,
   });
 
   if (!planned) return null;
@@ -187,11 +189,13 @@ const listOpenRequests = async (driverId) => {
   // Every ride still waiting for a driver, with the distance from this Tesla
   // and whether it could realistically be picked up.
   const requests = await matchingRepository.findOpenRequests();
+  if (!requests.length) return [];
+  const graph = await graphService.loadGraph();
 
   const enriched = [];
 
   for (const request of requests) {
-    const plan = await planRoute({ vehicle, activePool, ride: request });
+    const plan = await planRoute({ vehicle, activePool, ride: request, graph });
 
     enriched.push({
       ...request,

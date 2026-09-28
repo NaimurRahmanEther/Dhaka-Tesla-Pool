@@ -25,6 +25,7 @@ export default function useApi(fetcher, deps = []) {
   // synced in an effect (not during render) to satisfy react-hooks/refs, and
   // declared before the fetch effect so the fetch always reads a fresh value.
   const fetcherRef = useRef(fetcher)
+  const pending = useRef(false)
 
   useEffect(() => {
     fetcherRef.current = fetcher
@@ -32,14 +33,20 @@ export default function useApi(fetcher, deps = []) {
 
   useEffect(() => {
     let active = true
+    pending.current = true
+    let timeout
 
     // State is only ever set from the promise callbacks below - never
     // synchronously in the effect body - which is what
     // react-hooks/set-state-in-effect wants. The cost: a dependency-driven
     // refetch does not flip `loading` back on. This app never depends on that;
     // pages refetch through `reload`, which resets loading itself.
-    fetcherRef
-      .current()
+    Promise.race([
+      Promise.resolve().then(() => fetcherRef.current()),
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('This is taking too long. Please try again.')), 60000)
+      }),
+    ])
       .then((result) => {
         if (active) {
           setData(result)
@@ -50,16 +57,23 @@ export default function useApi(fetcher, deps = []) {
         if (active) setError(err)
       })
       .finally(() => {
-        if (active) setLoading(false)
+        clearTimeout(timeout)
+        if (active) {
+          pending.current = false
+          setLoading(false)
+        }
       })
 
     return () => {
       active = false
+      clearTimeout(timeout)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version, ...deps])
 
   const reload = ({ background = false } = {}) => {
+    if (pending.current) return
+    pending.current = true
     if (!background) setLoading(true)
     setError(null)
     setVersion((current) => current + 1)

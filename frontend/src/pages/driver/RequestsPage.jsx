@@ -148,11 +148,11 @@ export default function RequestsPage() {
             <EmptyState
               className="mt-6"
               icon="users"
-              title={requests.data?.length ? 'No matching requests' : 'A quiet moment on the road'}
+              title={requests.data?.length ? 'No matching requests' : 'No ride requests yet'}
               description={
                 requests.data?.length
                   ? 'Try another search or turn off the fit filter.'
-                  : 'New passenger requests will appear here. Keep your Tesla online when you’re ready.'
+                  : 'You’re ready to go. Keep your Tesla online — new passenger requests will appear here automatically.'
               }
             >
               {requests.data?.length > 0 && (

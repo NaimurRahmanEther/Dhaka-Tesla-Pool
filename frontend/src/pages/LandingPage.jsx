@@ -115,7 +115,10 @@ export default function LandingPage() {
             )}
             {locations.error && (
               <div className="flex flex-wrap items-center gap-3">
-                <Alert tone="error">We couldn’t load the stops. Please try again.</Alert>
+                <Alert tone="error">
+                  <p>We couldn’t load the stops. Please try again.</p>
+                  <p className="mt-1 text-xs">{locations.error.message}</p>
+                </Alert>
                 <Button variant="secondary" size="sm" onClick={locations.reload}>
                   Retry
                 </Button>
