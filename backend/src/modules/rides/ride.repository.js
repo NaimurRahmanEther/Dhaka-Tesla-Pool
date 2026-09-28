@@ -163,7 +163,12 @@ const isRideInDriverPool = async (rideId, driverId) => {
     [rideId, driverId],
   );
 
-  return result.rows.length > 0;
+  if (result.rows.length > 0) return true;
+  const history = await pool.query(
+    "SELECT 1 FROM ride_history WHERE ride_id=$1 AND actor_id=$2 AND action='CANCELLED' LIMIT 1",
+    [rideId, driverId],
+  );
+  return history.rows.length > 0;
 };
 
 module.exports = {

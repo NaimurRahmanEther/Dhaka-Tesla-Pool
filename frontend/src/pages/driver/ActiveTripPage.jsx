@@ -16,30 +16,8 @@ import usePolling from '@/hooks/usePolling'
 import poolService from '@/services/pool.service'
 import tripService from '@/services/trip.service'
 
-const steps = [
-  {
-    key: 'arrive',
-    title: 'Arrive at pickup',
-    hint: 'Let your passengers know you’re at the pickup point.',
-    label: 'Mark as arrived',
-  },
-  {
-    key: 'start',
-    title: 'Everyone on board',
-    hint: 'Start the trip once your passengers are in the car.',
-    label: 'Start trip',
-  },
-  {
-    key: 'complete',
-    title: 'You’ve arrived',
-    hint: 'Complete the trip once your passengers reach their destinations.',
-    label: 'Complete trip',
-  },
-]
-const indexes = { MATCHED: 0, DRIVER_ARRIVED: 1, ONGOING: 2 }
 const calls = {
-  arrive: tripService.arrive,
-  start: tripService.start,
+  cancel: tripService.cancel,
   complete: tripService.complete,
 }
 
@@ -50,13 +28,16 @@ export default function ActiveTripPage() {
   const [error, setError] = useState(null)
   const [ended, setEnded] = useState(false)
   const [confirm, setConfirm] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
+  const [cancelled, setCancelled] = useState(false)
   const rows = trip.data ?? []
   const poolId = rows[0]?.pool_id
   const manifest = useApi(
     () => (poolId ? poolService.getPoolPassengers(poolId) : Promise.resolve(null)),
     [poolId],
   )
-  const current = rows.length ? Math.min(...rows.map((r) => indexes[r.ride_status] ?? 3)) : -1
+  const passengers = rows.filter((row) => row.ride_id && !['CANCELLED', 'COMPLETED'].includes(row.ride_status))
+  const canComplete = passengers.length > 0 && passengers.every((row) => row.ride_status === 'ONGOING')
   const refresh = (options) => {
     trip.reload(options)
     manifest.reload(options)
@@ -68,21 +49,29 @@ export default function ActiveTripPage() {
     setNotice(null)
     try {
       await calls[key](poolId)
-      if (key === 'complete') {
-        setEnded(true)
-        setConfirm(false)
-      } else
-        setNotice(
-          key === 'arrive'
-            ? 'Your passengers can see that you’ve arrived.'
-            : 'Your trip is underway. Have a good journey.',
-        )
+      setCancelled(key === 'cancel')
+      setEnded(true)
+      setConfirm(false)
       refresh()
     } catch (err) {
       setError(err.message)
       refresh()
     } finally {
       setBusy(null)
+    }
+  }
+  async function passengerAction(rideId, action) {
+    setBusy(action + '-' + rideId)
+    setError(null)
+    setNotice(null)
+    try {
+      await tripService.updatePassenger(poolId, rideId, action)
+      setNotice(action === 'cancel' ? 'This passenger?s ride was cancelled. Other rides are unchanged.' : 'Passenger ride updated.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(null)
+      refresh()
     }
   }
   return (
@@ -110,9 +99,9 @@ export default function ActiveTripPage() {
           <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
             <Icon name="check" className="h-8 w-8" />
           </span>
-          <h2 className="mt-5 text-2xl font-bold text-brand-900">Another journey, well shared.</h2>
+          <h2 className="mt-5 text-2xl font-bold text-brand-900">{cancelled ? 'Trip cancelled.' : 'Another journey, well shared.'}</h2>
           <p className="mt-3 max-w-lg text-sm leading-6 text-slate-500">
-            Your trip is complete. Passengers can now pay their fares from the Payments page.
+            {cancelled ? 'The empty pool is closed. You can accept a new trip.' : 'Your trip is complete. Passengers can now pay their fares from the Payments page.'}
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <LinkButton to="/requests">
@@ -162,7 +151,7 @@ export default function ActiveTripPage() {
                 </span>
                 <div>
                   <h2 className="text-xl font-bold text-brand-900">{rows[0].model}</h2>
-                  <p className="mt-1 text-sm text-slate-500">{rows.length} ride(s) in this trip</p>
+                  <p className="mt-1 text-sm text-slate-500">{passengers.length} ride(s) in this trip</p>
                 </div>
               </div>
               <div className="rounded-xl bg-canvas px-5 py-3">
@@ -176,75 +165,36 @@ export default function ActiveTripPage() {
           <div className="mt-6 grid items-start gap-6 xl:grid-cols-[1fr_1.25fr]">
             <Card>
               <h2 className="mb-6 text-lg font-bold text-brand-900">Next stop, the next step.</h2>
-              <ol className="space-y-5">
-                {steps.map((step, i) => (
-                  <li
-                    key={step.key}
-                    className={
-                      'rounded-xl border p-4 ' +
-                      (current === i ? 'border-brand-100 bg-brand-50' : 'border-slate-100')
-                    }
-                  >
-                    <div className="flex items-start gap-3">
-                      <span
-                        className={
-                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ' +
-                          (current >= i
-                            ? 'bg-brand-800 text-lime-300'
-                            : 'bg-slate-100 text-slate-500')
-                        }
-                      >
-                        {current > i ? <Icon name="check" className="h-4 w-4" /> : i + 1}
-                      </span>
-                      <div>
-                        <h3 className="text-sm font-semibold text-brand-900">{step.title}</h3>
-                        <p className="mt-1 text-xs leading-5 text-slate-500">{step.hint}</p>
-                      </div>
-                    </div>
-                    {current === i && (
-                      <div className="mt-4">
-                        {step.key === 'complete' && confirm ? (
-                          <>
-                            <p className="mb-3 text-sm text-brand-800">
-                              Have all passengers reached their destination? Completing closes this
-                              pool.
-                            </p>
-                            <Button loading={busy === step.key} onClick={() => act(step.key)}>
-                              Yes, complete trip
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              className="mt-2"
-                              disabled={busy !== null}
-                              onClick={() => setConfirm(false)}
-                            >
-                              Keep trip open
-                            </Button>
-                          </>
-                        ) : (
-                          <Button
-                            full
-                            loading={busy === step.key}
-                            disabled={busy !== null}
-                            onClick={() =>
-                              step.key === 'complete' ? setConfirm(true) : act(step.key)
-                            }
-                          >
-                            {step.label}
-                            <Icon name="arrow" />
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ol>
+              <p className="text-sm leading-6 text-slate-500">
+                Mark arrival and pickup for each passenger in the passenger list. Cancelling a waiting passenger leaves other rides unchanged.
+              </p>
+              {canComplete && (
+                <div className="mt-5">
+                  {confirm && <p className="mb-3 text-sm text-brand-800">Have all passengers reached their destination?</p>}
+                  <Button loading={busy === 'complete'} disabled={busy !== null} onClick={() => confirm ? act('complete') : setConfirm(true)}>
+                    {confirm ? 'Yes, complete trip' : 'Complete trip'}
+                  </Button>
+                  {confirm && <Button variant="secondary" className="ml-2" disabled={busy !== null} onClick={() => setConfirm(false)}>Keep trip open</Button>}
+                </div>
+              )}
+              {!passengers.length && (
+                <div className="mt-6 border-t border-slate-100 pt-5">
+                  <p className="mb-3 text-sm text-slate-500">
+                    {confirmCancel ? 'Close this empty pool?' : 'No passengers remain. You can close this pool or accept another request.'}
+                  </p>
+                  <Button variant="danger" loading={busy === 'cancel'} disabled={busy !== null}
+                    onClick={() => confirmCancel ? act('cancel') : setConfirmCancel(true)}>
+                    {confirmCancel ? 'Yes, close pool' : 'Cancel empty trip'}
+                  </Button>
+                  {confirmCancel && <Button variant="secondary" className="ml-2" disabled={busy !== null} onClick={() => setConfirmCancel(false)}>Keep open</Button>}
+                </div>
+              )}
             </Card>
             <Card>
               {manifest.error ? (
                 <Alert tone="error">{manifest.error.message}</Alert>
               ) : manifest.data ? (
-                <PassengerManifest manifest={manifest.data} />
+                <PassengerManifest manifest={manifest.data} onAction={passengerAction} busy={busy} />
               ) : (
                 <Loading label="Loading passenger manifest" />
               )}

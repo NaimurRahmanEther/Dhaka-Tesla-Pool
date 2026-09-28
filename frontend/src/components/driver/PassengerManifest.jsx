@@ -1,6 +1,8 @@
-import { Badge, Icon } from '@/components/ui'
+import { useState } from 'react'
+import { Badge, Button, Icon } from '@/components/ui'
 import { formatTaka } from '@/lib/format'
-export default function PassengerManifest({ manifest }) {
+export default function PassengerManifest({ manifest, onAction, busy = null }) {
+  const [confirmRide, setConfirmRide] = useState(null)
   const { vehicle, occupiedSeats, availableSeats, passengers } = manifest
   return (
     <div>
@@ -42,6 +44,28 @@ export default function PassengerManifest({ manifest }) {
                   {passenger.fare == null ? 'Fare pending' : formatTaka(passenger.fare) + ' BDT'}
                 </span>
               </div>
+              {onAction && passenger.status === 'MATCHED' && (
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <Button size="sm" disabled={busy !== null} loading={busy === `arrive-${passenger.rideId}`} onClick={() => onAction(passenger.rideId, 'arrive')}>
+                    Arrived at pickup
+                  </Button>
+                  <Button size="sm" variant="danger" disabled={busy !== null} loading={busy === `cancel-${passenger.rideId}`}
+                    onClick={() => confirmRide === passenger.rideId ? onAction(passenger.rideId, 'cancel') : setConfirmRide(passenger.rideId)}>
+                    {confirmRide === passenger.rideId ? 'Yes, cancel this ride' : 'Cancel passenger ride'}
+                  </Button>
+                  {confirmRide === passenger.rideId && (
+                    <>
+                      <p className="w-full text-xs text-slate-500">Only this passenger’s ride will be cancelled. They can request another ride.</p>
+                      <Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => setConfirmRide(null)}>Keep ride</Button>
+                    </>
+                  )}
+                </div>
+              )}
+              {onAction && passenger.status === 'DRIVER_ARRIVED' && (
+                <Button className="mt-4" size="sm" disabled={busy !== null} loading={busy === `start-${passenger.rideId}`} onClick={() => onAction(passenger.rideId, 'start')}>
+                  Passenger on board
+                </Button>
+              )}
             </li>
           ))}
         </ul>

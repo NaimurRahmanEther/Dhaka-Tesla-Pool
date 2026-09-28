@@ -21,7 +21,7 @@ router.patch(
   "/:poolId/arrive",
   authMiddleware,
   roleMiddleware("DRIVER"),
-  controller.arriveTrip,
+  (req, res) => res.status(409).json({ success: false, message: "Mark arrival for each passenger separately" }),
 );
 
 // Start trip
@@ -30,7 +30,7 @@ router.patch(
   "/:poolId/start",
   authMiddleware,
   roleMiddleware("DRIVER"),
-  controller.startTrip,
+  (req, res) => res.status(409).json({ success: false, message: "Start each passenger ride separately" }),
 );
 
 // Complete trip
@@ -41,5 +41,8 @@ router.patch(
   roleMiddleware("DRIVER"),
   controller.completeTrip,
 );
+
+router.patch("/:poolId/cancel", authMiddleware, roleMiddleware("DRIVER"), controller.cancelTrip);
+router.patch("/:poolId/rides/:rideId/:action", authMiddleware, roleMiddleware("DRIVER"), controller.updatePassenger);
 
 module.exports = router;

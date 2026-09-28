@@ -20,15 +20,15 @@ const findActivePoolByDriverId = async (driverId) => {
       FROM pools
       JOIN vehicles
       ON pools.vehicle_id = vehicles.id
-      JOIN pool_rides
+      LEFT JOIN pool_rides
       ON pools.id = pool_rides.pool_id
-      JOIN rides
+      LEFT JOIN rides
       ON pool_rides.ride_id = rides.id
-      JOIN users
+      LEFT JOIN users
       ON rides.passenger_id = users.id
-      JOIN locations pickup
+      LEFT JOIN locations pickup
       ON rides.pickup_location_id = pickup.id
-      JOIN locations destination
+      LEFT JOIN locations destination
       ON rides.destination_location_id = destination.id
       WHERE pools.driver_id=$1
       AND pools.status='ACTIVE'
