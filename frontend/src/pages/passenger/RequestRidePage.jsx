@@ -10,7 +10,7 @@ import {
   LinkButton,
   PageHeader,
   Select,
-  Spinner,
+  Loading,
 } from '@/components/ui'
 import RouteSummary from '@/components/ride/RouteSummary'
 import useApi from '@/hooks/useApi'
@@ -108,7 +108,7 @@ export default function RequestRidePage() {
       />
       {loading ? (
         <div className="py-20">
-          <Spinner label="Loading pickup and destination stops" />
+          <Loading label="Loading pickup and destination stops" />
         </div>
       ) : error ? (
         <div className="mt-8">

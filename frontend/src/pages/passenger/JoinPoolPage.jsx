@@ -10,7 +10,7 @@ import {
   LinkButton,
   PageHeader,
   Select,
-  Spinner,
+  Loading,
 } from '@/components/ui'
 import FareBreakdown from '@/components/ride/FareBreakdown'
 import useApi from '@/hooks/useApi'
@@ -82,7 +82,7 @@ export default function JoinPoolPage() {
             )}
             {loading ? (
               <div className="py-12">
-                <Spinner label="Loading your waiting rides" />
+                <Loading label="Loading your waiting rides" />
               </div>
             ) : error ? (
               <div className="mt-6">

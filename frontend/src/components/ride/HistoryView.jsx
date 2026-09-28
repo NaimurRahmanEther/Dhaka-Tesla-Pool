@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import HistoryTable from '@/components/ride/HistoryTable'
-import { Alert, Button, EmptyState, Icon, Input, PageHeader, Spinner } from '@/components/ui'
+import { Alert, Button, EmptyState, Icon, Input, PageHeader, Loading } from '@/components/ui'
 import useApi from '@/hooks/useApi'
 
 export default function HistoryView({
@@ -50,7 +50,7 @@ export default function HistoryView({
         </Alert>
       ) : loading && data === null ? (
         <div className="py-20">
-          <Spinner label="Loading journey history" />
+          <Loading label="Loading journey history" />
         </div>
       ) : !filtered.length ? (
         <EmptyState

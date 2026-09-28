@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import Brand from '@/components/layout/Brand'
-import { Alert, Button, Icon, LinkButton } from '@/components/ui'
+import { Alert, Button, Icon, LinkButton, Loading } from '@/components/ui'
 import RouteArt from '@/components/ui/RouteArt'
 import useApi from '@/hooks/useApi'
 import useAuth from '@/hooks/useAuth'
@@ -111,9 +111,7 @@ export default function LandingPage() {
           <div className="mx-auto max-w-7xl px-5 py-7 sm:px-10">
             <p className="eyebrow mb-4">Find your neighbourhood</p>
             {locations.loading && (
-              <p role="status" className="text-sm text-slate-500">
-                Finding available stops…
-              </p>
+              <Loading label="Finding available stops…" className="py-4" />
             )}
             {locations.error && (
               <div className="flex flex-wrap items-center gap-3">

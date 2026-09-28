@@ -10,7 +10,7 @@ import {
   Input,
   LinkButton,
   PageHeader,
-  Spinner,
+  Loading,
 } from '@/components/ui'
 import useApi from '@/hooks/useApi'
 import usePolling from '@/hooks/usePolling'
@@ -142,7 +142,7 @@ export default function RequestsPage() {
           </p>
           {requests.loading && requests.data === null ? (
             <div className="py-16">
-              <Spinner label="Loading passenger requests" />
+              <Loading label="Loading passenger requests" />
             </div>
           ) : !filtered.length ? (
             <EmptyState

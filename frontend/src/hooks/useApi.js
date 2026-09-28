@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 // One hook for every data-loading page: { data, loading, error, reload }.
 //
 //   const { data, loading, error, reload } = useApi(fetcher, deps)
-//   if (loading) return <Spinner />
+//   if (loading) return <Loading />
 //   if (error) return <Alert>{error}</Alert>
 //   if (!data.length) return <EmptyState />
 //   return data.map(...)

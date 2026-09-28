@@ -8,7 +8,7 @@ import {
   Icon,
   PageHeader,
   Select,
-  Spinner,
+  Loading,
 } from '@/components/ui'
 import useApi from '@/hooks/useApi'
 import { formatDateTime, formatTaka } from '@/lib/format'
@@ -81,7 +81,7 @@ export default function PaymentsPage() {
         </div>
       ) : (rides.loading && rides.data === null) || (payments.loading && payments.data === null) ? (
         <div className="py-20">
-          <Spinner label="Loading your payments" />
+          <Loading label="Loading your payments" />
         </div>
       ) : (
         <>

@@ -1,4 +1,4 @@
-import Spinner from '@/components/ui/Spinner'
+import Loading from '@/components/ui/Loading'
 const variants = {
   primary: 'button-primary',
   secondary: 'button-secondary',
@@ -24,7 +24,7 @@ export default function Button({
       className={`button ${variants[variant]} ${size === 'sm' ? 'px-3 py-2 text-xs' : ''} ${full ? 'w-full' : ''} ${className}`}
       {...rest}
     >
-      {loading && <Spinner size="sm" />}
+      {loading && <Loading size="sm" />}
       {children}
     </button>
   )

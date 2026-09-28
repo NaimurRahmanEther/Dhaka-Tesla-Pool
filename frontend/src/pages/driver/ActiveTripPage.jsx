@@ -9,7 +9,7 @@ import {
   Icon,
   LinkButton,
   PageHeader,
-  Spinner,
+  Loading,
 } from '@/components/ui'
 import useApi from '@/hooks/useApi'
 import usePolling from '@/hooks/usePolling'
@@ -125,7 +125,7 @@ export default function ActiveTripPage() {
         </Card>
       ) : trip.loading && trip.data === null ? (
         <div className="py-20">
-          <Spinner label="Loading active trip" />
+          <Loading label="Loading active trip" />
         </div>
       ) : trip.error?.status === 404 || (!trip.error && !rows.length) ? (
         <EmptyState
@@ -246,7 +246,7 @@ export default function ActiveTripPage() {
               ) : manifest.data ? (
                 <PassengerManifest manifest={manifest.data} />
               ) : (
-                <Spinner label="Loading passenger manifest" />
+                <Loading label="Loading passenger manifest" />
               )}
               <div className="mt-6 border-t border-slate-100 pt-5">
                 <Badge status="ACTIVE" />

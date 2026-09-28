@@ -10,7 +10,7 @@ import {
   LinkButton,
   PageHeader,
   Select,
-  Spinner,
+  Loading,
 } from '@/components/ui'
 import RouteSummary from '@/components/ride/RouteSummary'
 import useApi from '@/hooks/useApi'
@@ -115,7 +115,7 @@ export default function MyTeslaPage() {
       )}
       {loading ? (
         <div className="py-20">
-          <Spinner label="Loading your Tesla" />
+          <Loading label="Loading your Tesla" />
         </div>
       ) : loadError ? (
         <div className="mt-8">
@@ -246,7 +246,7 @@ export default function MyTeslaPage() {
             </p>
             {route.loading ? (
               <div className="py-8">
-                <Spinner label="Loading planned route" />
+                <Loading label="Loading planned route" />
               </div>
             ) : route.error && route.error.status !== 404 ? (
               <Alert className="mt-5" tone="error">

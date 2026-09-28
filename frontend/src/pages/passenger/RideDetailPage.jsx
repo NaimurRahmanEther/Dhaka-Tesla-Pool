@@ -11,7 +11,7 @@ import {
   Icon,
   LinkButton,
   PageHeader,
-  Spinner,
+  Loading,
 } from '@/components/ui'
 import useApi from '@/hooks/useApi'
 import usePolling from '@/hooks/usePolling'
@@ -62,7 +62,7 @@ export default function RideDetailPage() {
   if (rides.loading && rides.data === null)
     return (
       <div className="py-20">
-        <Spinner label="Loading your ride" />
+        <Loading label="Loading your ride" />
       </div>
     )
   if (rides.error)
@@ -157,7 +157,7 @@ export default function RideDetailPage() {
           <Card>
             <h2 className="mb-6 text-lg font-bold text-brand-900">Along the way</h2>
             {history.loading && history.data === null ? (
-              <Spinner label="Loading ride timeline" />
+              <Loading label="Loading ride timeline" />
             ) : history.error ? (
               <Alert tone="error">{history.error.message}</Alert>
             ) : history.data?.timeline?.length ? (

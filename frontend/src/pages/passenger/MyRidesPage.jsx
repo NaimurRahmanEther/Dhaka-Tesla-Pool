@@ -9,7 +9,7 @@ import {
   Input,
   LinkButton,
   PageHeader,
-  Spinner,
+  Loading,
 } from '@/components/ui'
 import RouteSummary from '@/components/ride/RouteSummary'
 import useApi from '@/hooks/useApi'
@@ -84,7 +84,7 @@ export default function MyRidesPage() {
       )}
       {loading && rides === null ? (
         <div className="py-20">
-          <Spinner label="Loading your rides" />
+          <Loading label="Loading your rides" />
         </div>
       ) : !error && filtered.length === 0 ? (
         <EmptyState
