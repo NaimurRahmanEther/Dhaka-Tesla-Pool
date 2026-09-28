@@ -221,7 +221,9 @@ export default function MyTeslaPage() {
               </span>
               <span className="flex items-center gap-2">
                 <Icon name="pin" />
-                {nameFor(vehicle.data.current_location_id)}
+                {routeLocked
+                  ? `${nameFor(route.data.start_location_id)} → ${nameFor(route.data.destination_location_id) || 'No passengers remaining'}`
+                  : nameFor(vehicle.data.current_location_id)}
               </span>
             </div>
             <div className="mt-7 border-t border-slate-100 pt-6">
@@ -283,7 +285,7 @@ export default function MyTeslaPage() {
             <form className="mt-5" noValidate onSubmit={plan}>
               <fieldset disabled={busy !== null || routeLocked || Boolean(routeUnavailable)} className="space-y-5">
                 <Select
-                  label="Current location"
+                  label={routeLocked ? 'Trip pickup location' : 'Current location'}
                   options={options}
                   value={routeLocked ? String(route.data.start_location_id) : routeLocation || String(vehicle.data.current_location_id)}
                   onChange={(e) => {

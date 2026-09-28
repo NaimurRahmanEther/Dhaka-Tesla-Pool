@@ -33,12 +33,20 @@ const findRouteByDriverId = async (driverId) => {
     `
       SELECT * FROM (
         SELECT pools.id, pools.driver_id,
-          vehicles.current_location_id AS start_location_id,
+          COALESCE(first_ride.pickup_location_id, vehicles.current_location_id) AS start_location_id,
           (pools.current_route->'path'->>-1)::integer AS destination_location_id,
           COALESCE(pools.current_route, jsonb_build_object('path', jsonb_build_array(vehicles.current_location_id), 'distance', 0)) AS route,
           pools.route_updated_at AS created_at, TRUE AS locked,
           pools.id AS pool_id
         FROM pools JOIN vehicles ON vehicles.id=pools.vehicle_id
+        LEFT JOIN LATERAL (
+          SELECT rides.pickup_location_id
+          FROM pool_rides JOIN rides ON rides.id=pool_rides.ride_id
+          WHERE pool_rides.pool_id=pools.id
+            AND rides.status NOT IN ('CANCELLED', 'COMPLETED')
+          ORDER BY rides.matched_at ASC NULLS LAST, rides.id ASC
+          LIMIT 1
+        ) AS first_ride ON TRUE
         WHERE pools.driver_id=$1 AND pools.status='ACTIVE'
         UNION ALL
         SELECT id, driver_id, start_location_id, destination_location_id,
