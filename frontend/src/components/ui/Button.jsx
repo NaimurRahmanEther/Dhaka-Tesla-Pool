@@ -3,6 +3,7 @@ const variants = {
   primary: 'button-primary',
   secondary: 'button-secondary',
   danger: 'button-danger',
+  dangerOutline: 'button-danger-outline',
   light: 'button-light',
 }
 export default function Button({

@@ -1,3 +1,4 @@
+import CancelAction from '@/components/ui/CancelAction'
 import { useState } from 'react'
 import PassengerManifest from '@/components/driver/PassengerManifest'
 import RoutePath from '@/components/ride/RoutePath'
@@ -181,14 +182,20 @@ export default function ActiveTripPage() {
               )}
               {!passengers.length && (
                 <div className="mt-6 border-t border-slate-100 pt-5">
-                  <p className="mb-3 text-sm text-slate-500">
-                    {confirmCancel ? 'Close this empty pool?' : 'No passengers remain. You can close this pool or accept another request.'}
-                  </p>
-                  <Button variant="danger" loading={busy === 'cancel'} disabled={busy !== null}
-                    onClick={() => confirmCancel ? act('cancel') : setConfirmCancel(true)}>
-                    {confirmCancel ? 'Yes, close pool' : 'Cancel empty trip'}
-                  </Button>
-                  {confirmCancel && <Button variant="secondary" className="ml-2" disabled={busy !== null} onClick={() => setConfirmCancel(false)}>Keep open</Button>}
+                  <p className="mb-3 text-sm leading-6 text-slate-500">No passengers remain. Close this trip when you are ready to plan your next journey.</p>
+                  <CancelAction
+                    confirming={confirmCancel}
+                    onOpen={() => setConfirmCancel(true)}
+                    onKeep={() => setConfirmCancel(false)}
+                    onConfirm={() => act('cancel')}
+                    busy={busy === 'cancel'}
+                    disabled={busy !== null}
+                    label="Cancel empty trip"
+                    title="Close this empty trip?"
+                    description="No passenger rides will be affected. You can choose a new location and destination afterward."
+                    keepLabel="Keep trip open"
+                    confirmLabel="Yes, close trip"
+                  />
                 </div>
               )}
             </Card>

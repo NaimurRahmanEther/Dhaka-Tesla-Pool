@@ -1,3 +1,4 @@
+import CancelAction from '@/components/ui/CancelAction'
 import { useState } from 'react'
 import { Badge, Button, Icon } from '@/components/ui'
 import { formatTaka } from '@/lib/format'
@@ -49,16 +50,19 @@ export default function PassengerManifest({ manifest, onAction, busy = null }) {
                   <Button size="sm" disabled={busy !== null} loading={busy === `arrive-${passenger.rideId}`} onClick={() => onAction(passenger.rideId, 'arrive')}>
                     Arrived at pickup
                   </Button>
-                  <Button size="sm" variant="danger" disabled={busy !== null} loading={busy === `cancel-${passenger.rideId}`}
-                    onClick={() => confirmRide === passenger.rideId ? onAction(passenger.rideId, 'cancel') : setConfirmRide(passenger.rideId)}>
-                    {confirmRide === passenger.rideId ? 'Yes, cancel this ride' : 'Cancel passenger ride'}
-                  </Button>
-                  {confirmRide === passenger.rideId && (
-                    <>
-                      <p className="w-full text-xs text-slate-500">Only this passenger’s ride will be cancelled. They can request another ride.</p>
-                      <Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => setConfirmRide(null)}>Keep ride</Button>
-                    </>
-                  )}
+                  <CancelAction
+                    confirming={confirmRide === passenger.rideId}
+                    onOpen={() => setConfirmRide(passenger.rideId)}
+                    onKeep={() => setConfirmRide(null)}
+                    onConfirm={() => onAction(passenger.rideId, 'cancel')}
+                    busy={busy === `cancel-${passenger.rideId}`}
+                    disabled={busy !== null}
+                    label="Cancel passenger ride"
+                    title={`Cancel ${passenger.name}'s ride?`}
+                    description="Only this passenger's ride will be cancelled. Other passengers will continue their journey."
+                    keepLabel="Keep passenger"
+                    confirmLabel="Yes, cancel this ride"
+                  />
                 </div>
               )}
               {onAction && passenger.status === 'DRIVER_ARRIVED' && (

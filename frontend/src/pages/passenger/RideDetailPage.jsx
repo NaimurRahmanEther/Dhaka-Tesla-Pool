@@ -1,3 +1,4 @@
+import CancelAction from '@/components/ui/CancelAction'
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import FareBreakdown from '@/components/ride/FareBreakdown'
@@ -217,33 +218,18 @@ export default function RideDetailPage() {
               <p className="mt-2 text-sm leading-6 text-slate-500">
                 You can cancel before your driver arrives.
               </p>
-              {confirming ? (
-                <div className="mt-4">
-                  <Alert tone="error">
-                    Cancel this ride? You’ll need to request a new ride if you change your mind.
-                  </Alert>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button variant="danger" loading={cancelling} onClick={cancel}>
-                      Yes, cancel ride
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      disabled={cancelling}
-                      onClick={() => setConfirming(false)}
-                    >
-                      Keep my ride
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <Button
-                  variant="secondary"
-                  className="mt-4 text-red-700"
-                  onClick={() => setConfirming(true)}
-                >
-                  Cancel ride
-                </Button>
-              )}
+              <div className="mt-4">
+                <CancelAction
+                  confirming={confirming}
+                  onOpen={() => setConfirming(true)}
+                  onKeep={() => setConfirming(false)}
+                  onConfirm={cancel}
+                  busy={cancelling}
+                  disabled={cancelling}
+                  description="This ends your current request. You can book another ride whenever you are ready."
+                  keepLabel="Keep my ride"
+                />
+              </div>
             </Card>
           )}
         </div>
