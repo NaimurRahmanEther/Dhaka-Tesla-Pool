@@ -13,6 +13,8 @@ import {
   Loading,
 } from '@/components/ui'
 import RouteSummary from '@/components/ride/RouteSummary'
+import RoutePath from '@/components/ride/RoutePath'
+import RoutePreview from '@/components/ride/RoutePreview'
 import useApi from '@/hooks/useApi'
 import usePolling from '@/hooks/usePolling'
 import { formatDateTime } from '@/lib/format'
@@ -276,6 +278,7 @@ export default function MyTeslaPage() {
                 <p className="mt-5 text-xs text-slate-500">
                   {route.data.route.distance} km · {routeLocked ? 'Trip updated' : 'Planned'} {formatDateTime(route.data.created_at)}
                 </p>
+                <div className="mt-4"><RoutePath route={route.data.route} title={routeLocked ? 'Shared trip route' : 'Your saved route'} /></div>
               </div>
             ) : (
               <p className="my-6 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-700">
@@ -305,6 +308,13 @@ export default function MyTeslaPage() {
                   error={errors.destination}
                   required
                 />
+                {!routeLocked && destination && (
+                  <RoutePreview
+                    key={`${routeLocation || vehicle.data.current_location_id}-${destination}`}
+                    start={routeLocation || vehicle.data.current_location_id}
+                    destination={destination}
+                  />
+                )}
                 <Button type="submit" loading={busy === 'plan'}>
                   <Icon name="route" />
                   {routeLocked ? 'Route locked during trip' : route.data ? 'Update route' : 'Plan my route'}

@@ -60,12 +60,21 @@ const findRidesByPassengerId = async (passengerId) => {
       SELECT
           rides.*,
           pickup.name AS pickup_location,
-          destination.name AS destination_location
+          destination.name AS destination_location,
+          shared.current_route AS shared_route,
+          shared.route_updated_at,
+          shared.id AS pool_id
       FROM rides
       JOIN locations pickup
       ON rides.pickup_location_id = pickup.id
       JOIN locations destination
       ON rides.destination_location_id = destination.id
+      LEFT JOIN LATERAL (
+        SELECT pools.id, pools.current_route, pools.route_updated_at
+        FROM pool_rides JOIN pools ON pools.id=pool_rides.pool_id
+        WHERE pool_rides.ride_id=rides.id
+        ORDER BY pools.created_at DESC LIMIT 1
+      ) AS shared ON TRUE
       WHERE rides.passenger_id=$1
       ORDER BY requested_at DESC
     `,

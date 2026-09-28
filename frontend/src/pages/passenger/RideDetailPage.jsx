@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import FareBreakdown from '@/components/ride/FareBreakdown'
 import RouteSummary from '@/components/ride/RouteSummary'
+import RoutePath from '@/components/ride/RoutePath'
 import {
   Alert,
   Badge,
@@ -143,6 +144,12 @@ export default function RideDetailPage() {
           <Card>
             <h2 className="mb-6 text-lg font-bold text-brand-900">Journey details</h2>
             <RouteSummary pickup={ride.pickup_location} destination={ride.destination_location} />
+            {ride.status !== 'CANCELLED' && (
+              <div className="mt-6">
+                <RoutePath route={ride.shared_route} title="Your shared trip route" />
+                {ride.shared_route && <p className="mt-3 text-xs text-slate-500">The shared route refreshes automatically as passengers join. Your pickup and destination stay the same.</p>}
+              </div>
+            )}
             <div className="mt-6 flex flex-wrap gap-4 border-t border-slate-100 pt-5 text-xs text-slate-500">
               <span className="flex items-center gap-2">
                 <Icon name="users" className="h-4 w-4" />

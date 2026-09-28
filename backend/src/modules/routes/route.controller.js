@@ -15,6 +15,10 @@ const getMyRoute = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  previewRoute: asyncHandler(async (req, res) => {
+    const route = await routeService.previewRoute(req.user.id, req.body);
+    return successResponse(res, 200, "Route preview calculated", route);
+  }),
   createRoute,
   getMyRoute,
 };

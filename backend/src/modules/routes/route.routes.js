@@ -29,4 +29,6 @@ router.get(
   controller.getMyRoute,
 );
 
+router.post("/preview", authMiddleware, roleMiddleware("DRIVER"), validate(createRouteSchema), controller.previewRoute);
+
 module.exports = router;

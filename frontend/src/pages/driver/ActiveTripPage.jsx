@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import PassengerManifest from '@/components/driver/PassengerManifest'
+import RoutePath from '@/components/ride/RoutePath'
 import {
   Alert,
   Badge,
@@ -165,6 +166,7 @@ export default function ActiveTripPage() {
           <div className="mt-6 grid items-start gap-6 xl:grid-cols-[1fr_1.25fr]">
             <Card>
               <h2 className="mb-6 text-lg font-bold text-brand-900">Next stop, the next step.</h2>
+              {rows[0]?.current_route && <div className="mb-5"><RoutePath route={rows[0].current_route} title="Shared trip route" /></div>}
               <p className="text-sm leading-6 text-slate-500">
                 Mark arrival and pickup for each passenger in the passenger list. Cancelling a waiting passenger leaves other rides unchanged.
               </p>

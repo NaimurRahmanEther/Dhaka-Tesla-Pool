@@ -7,6 +7,8 @@ import client from '@/api/client'
 // latest one, or a 404 when the driver has never planned a route (an empty
 // state, not an error).
 export default {
+  preview: (currentLocationId, destinationLocationId) =>
+    client.post('/driver-routes/preview', { currentLocationId, destinationLocationId }),
   // POST /driver-routes — body `{ destinationLocationId }`, a positive integer.
   // Returns the stored route row: { id, driver_id, start_location_id,
   // destination_location_id, route: { path, distance }, created_at }.

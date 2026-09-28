@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import RequestCard from '@/components/driver/RequestCard'
 import FareBreakdown from '@/components/ride/FareBreakdown'
+import RoutePath from '@/components/ride/RoutePath'
 import {
   Alert,
   Button,
@@ -87,6 +88,7 @@ export default function RequestsPage() {
           <div className="mt-5 max-w-md">
             <FareBreakdown breakdown={result.fareBreakdown} />
           </div>
+          <div className="mt-5"><RoutePath route={result.route} title="Updated shared route" /></div>
           <LinkButton to="/active-trip" className="mt-5">
             Open active trip <Icon name="arrow" />
           </LinkButton>

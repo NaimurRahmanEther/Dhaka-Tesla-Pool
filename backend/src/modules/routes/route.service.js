@@ -58,6 +58,18 @@ const getDriverRoute = async (driverId) => {
 };
 
 module.exports = {
+  previewRoute: async (driverId, data) => {
+    const vehicle = await routeRepository.findDriverLocation(driverId);
+    if (!vehicle) throw new AppError("Driver vehicle not found", 404);
+    const start = data.currentLocationId ?? vehicle.current_location_id;
+    if (start === data.destinationLocationId) throw new AppError("Choose different locations", 400);
+    const route = await graphService.calculateDriverRoute({
+      currentLocationId: start, pickupLocationId: start,
+      destinationLocationId: data.destinationLocationId,
+    });
+    if (!route || !Number.isFinite(route.distance)) throw new AppError("No route available between these locations", 400);
+    return route;
+  },
   createRoute,
   getDriverRoute,
 };
