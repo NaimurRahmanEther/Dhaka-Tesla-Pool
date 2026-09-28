@@ -8,7 +8,6 @@ const {
 } = require("../pools/pooling.route.optimizer");
 
 const graphService = require("../graph/graph.service");
-const fareService = require("../fare/fare.service");
 const matchingRepository = require("./matching.repository");
 
 const AppError = require("../../utils/AppError");
@@ -66,24 +65,9 @@ const occupiedIn = async (activePool) => {
 
 // The passenger is billed for their own leg (pickup -> destination), never for
 // the driver's deadhead drive to the pickup point.
-const passengerLegDistance = async (ride) =>
-  graphService.calculateRouteDistance([
-    ride.pickup_location_id,
-    ride.destination_location_id,
-  ]);
-
 // Claim a seat in one Tesla. Single write path for both automatic matching and
 // manual accept. Capacity is decided in the transaction, so checks here are advisory.
 const claimSeat = async ({ ride, vehicle, activePool, route }) => {
-  // The first passenger into a pool pays the solo fare; sharing a Tesla is
-  // what earns the discount.
-  const isPool = Boolean(activePool);
-
-  const fareResult = await fareService.calculateRideFare({
-    distance: await passengerLegDistance(ride),
-    isPool,
-  });
-
   const assignment = await matchingRepository.assignRideToPool({
     vehicleId: vehicle.vehicle_id,
     driverId: vehicle.driver_id,
@@ -92,13 +76,13 @@ const claimSeat = async ({ ride, vehicle, activePool, route }) => {
     route,
   });
 
-  await matchingRepository.updateRideFare(ride.id, fareResult.fare, fareResult);
+  const fareResult = assignment.ride.fare_breakdown;
 
   return {
     assignment,
     driver: vehicle.driver_name,
     vehicleId: vehicle.vehicle_id,
-    pooled: isPool,
+    pooled: fareResult.isPool,
     route,
     fare: fareResult.fare,
     fareBreakdown: fareResult,

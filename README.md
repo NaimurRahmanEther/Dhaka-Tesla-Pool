@@ -10,8 +10,8 @@ A ride-pooling service for Dhaka. Passengers request a ride, drivers run Teslas,
 
 8:41 AM, Banani Road 11. Jashim is leaning against **Bullet**, his 4-seat Tesla. Nusrat books a ride to Mohakhali. Two minutes later Rafiq books almost the same route to Gulshan 1. The app figures out in under a second whether they can share a seat, split the fare fairly, and survive the ride. Then Shirin tries to grab the last seat thirty seconds later.
 
-- **Nusrat** (solo) pays **210 BDT** — 50 base + 160 distance
-- **Rafiq** (pooled) pays **170 BDT** — 50 base + 160 distance − 40 pool discount
+- **Nusrat** pays **210 BDT** initially for Banani -> Mohakhali (8 km), then **170 BDT** when Rafiq joins.
+- **Rafiq** pays **95 BDT** for Banani -> Gulshan (3 km): 50 base + 60 distance - 15 pool discount.
 - **Shirin** gets the last seat or is told how many seats remain
 
 Jashim just wants to know who's riding and when he can go. Everyone else just wants to get where they're going, pay a fair price, and not accidentally make a new friend.
@@ -134,28 +134,32 @@ This verifies TLS certificates and enables channel binding when offered. Never c
 ### Pool / Ride
 - Multiple requests share one Tesla
 - Occupied seats never exceed capacity (enforced by `SELECT ... FOR UPDATE`)
-- Each passenger gets individual fare (210 solo vs 170 pooled)
+- Each passenger gets a fare based on their own distance; all sharing passengers receive the discount, including the first passenger.
 - Clear pool membership and lifecycle
 
 ### Fare Model
-```
-passengerFare = baseFare + distanceCharge - poolDiscount
-```
 
-| Term | Value | Notes |
-|------|-------|-------|
-| `baseFare` | 50 BDT | Fixed per trip, never discounted |
-| `distanceCharge` | 20 BDT/km | Rounded to nearest Taka |
-| `poolDiscount` | 25% of distance | Only when sharing a Tesla |
+`passengerFare = baseFare + distanceCharge - poolDiscount`
 
-**Worked example** — Banani → Mohakhali (8 km):
-```
-Solo:    50 + round(8 × 20)           = 50 + 160        = 210 BDT
-Pooled:  50 + 160 − round(160 × 0.25) = 50 + 160 − 40   = 170 BDT
-```
+- Base fare: **50 BDT per ride request** (not per seat).
+- Distance charge: **round(passenger distance in km ? 20 BDT)**.
+- Pool discount: **round(distanceCharge ? 25%)** when at least two distinct passengers share a pool; otherwise zero.
+- Each passenger pays for their own shortest pickup-to-destination distance, not the driver's approach or other passengers' detours.
+- Adding a second, third, or fourth passenger updates every active ride's stored fare and breakdown in the same transaction as acceptance. The percentage stays 25%; discounts do not stack.
+- Once earned, a sharing discount is retained if another passenger cancels. Completed rides and settled payments are not repriced.
 
-- Money stored as **integer Taka** (no decimals)
-- Payment: **Cash** or **Simulated TeslaPay wallet** (no real gateway)
+**Hand-checkable example using the seeded road network:** Banani -> Gulshan is 3 km; Gulshan -> Mohakhali is 5 km. Use the seeded **Gulshan** location for Rafiq's Gulshan 1 stop.
+
+| Passenger | Own journey | Distance charge | Solo fare | Shared discount | Shared fare |
+|---|---|---:|---:|---:|---:|
+| Nusrat | Banani -> Gulshan -> Mohakhali (8 km) | 8 * 20 = 160 | 50 + 160 = 210 | 160 * 25% = 40 | **170 BDT** |
+| Rafiq | Banani -> Gulshan (3 km) | 3 * 20 = 60 | 50 + 60 = 110 | 60 * 25% = 15 | **95 BDT** |
+
+Accept Nusrat first: her fare is 210. Accept Rafiq into the same pool: Nusrat changes to 170 and Rafiq pays 95. Arrival order does not decide discount eligibility. Passenger Ride Details refresh automatically to show the updated breakdown.
+
+**Money storage:** PostgreSQL INTEGER columns store whole BDT/Taka for rides.fare and payments.amount; fare_breakdown stores the same integer components as JSON. This is not integer poysha or decimal currency. Whole-Taka rounding is an explicit simplification: integer totals avoid fractional rounding drift in stored balances, and every rounded line item adds up exactly. For fractional-Taka pricing, migrate all monetary values consistently to integer poysha (100 per Taka) or fixed-scale NUMERIC; do not mix units.
+
+**Payment:** Cash or simulated TeslaPay wallet (API value TESLA_WALLET). Both record the completed ride's stored fare; no real gateway or wallet transfer is performed.
 
 ### Ride Lifecycle
 ```

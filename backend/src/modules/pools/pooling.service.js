@@ -74,7 +74,7 @@ const addPassengerToPool = async ({ poolId, ride }) => {
 
     const fareResult = await fareService.calculateRideFare({
       distance: passengerDistance,
-      isPool: true,
+      isPool: false,
     });
 
     const poolRide = await poolingRepository.addRideToPool(client, {
@@ -97,14 +97,16 @@ const addPassengerToPool = async ({ poolId, ride }) => {
       },
     });
 
+    const fares = await fareService.refreshPoolFares(client, poolId);
+    const repricedRide = fares.get(ride.id);
     await client.query("COMMIT");
 
     return {
       poolRide,
       pool: updatedPool,
-      ride: updatedRide,
-      fare: fareResult.fare,
-      fareBreakdown: fareResult,
+      ride: repricedRide ?? updatedRide,
+      fare: repricedRide.fare,
+      fareBreakdown: repricedRide.fare_breakdown,
     };
   } catch (error) {
     await client.query("ROLLBACK");

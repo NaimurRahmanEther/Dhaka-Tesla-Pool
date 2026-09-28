@@ -270,12 +270,13 @@ const assignRideToPool = async ({
       [rideId, driverId],
     );
 
+    const fares = await require("../fare/fare.service").refreshPoolFares(client, activePool.id);
     await client.query("COMMIT");
 
     return {
       pool: updatedPool.rows[0],
       poolRide: poolRide.rows[0],
-      ride: updatedRide.rows[0],
+      ride: fares.get(rideId) ?? updatedRide.rows[0],
       availableSeats: availableSeats - seatsAllocated,
     };
   } catch (error) {
