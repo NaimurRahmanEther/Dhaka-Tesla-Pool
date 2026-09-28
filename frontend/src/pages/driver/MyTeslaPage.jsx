@@ -27,6 +27,7 @@ export default function MyTeslaPage() {
   const [capacity, setCapacity] = useState('')
   const [currentLocation, setCurrentLocation] = useState('')
   const [destination, setDestination] = useState('')
+  const [routeLocation, setRouteLocation] = useState('')
   const [errors, setErrors] = useState({})
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(null)
@@ -84,7 +85,8 @@ export default function MyTeslaPage() {
     setErrors({})
     setNotice(null)
     try {
-      await routeService.createRoute(Number(destination))
+      await routeService.createRoute(Number(destination), Number(routeLocation || vehicle.data.current_location_id))
+      vehicle.reload()
       route.reload()
       setDestination('')
       setNotice('Your planned route has been updated.')
@@ -242,7 +244,7 @@ export default function MyTeslaPage() {
           <Card>
             <h2 className="text-lg font-bold text-brand-900">Where are you heading?</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Save a planned route from your current location.
+              Update your current location and destination between trips. During an active trip, complete it first.
             </p>
             {route.loading ? (
               <div className="py-8">
@@ -270,10 +272,20 @@ export default function MyTeslaPage() {
             <form className="mt-5" noValidate onSubmit={plan}>
               <fieldset disabled={busy !== null} className="space-y-5">
                 <Select
+                  label="Current location"
+                  options={options}
+                  value={routeLocation || String(vehicle.data.current_location_id)}
+                  onChange={(e) => {
+                    setRouteLocation(e.target.value)
+                    setDestination('')
+                  }}
+                  required
+                />
+                <Select
                   label={route.data ? 'New destination' : 'Destination'}
                   placeholder="Choose a destination"
                   options={options.filter(
-                    (o) => o.value !== String(vehicle.data.current_location_id),
+                    (o) => o.value !== (routeLocation || String(vehicle.data.current_location_id)),
                   )}
                   value={destination}
                   onChange={(e) => setDestination(e.target.value)}

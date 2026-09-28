@@ -7,8 +7,8 @@ const createDriverRoute = async ({
   startLocationId,
   destinationLocationId,
   route,
-}) => {
-  const result = await pool.query(
+}, client = pool) => {
+  const result = await client.query(
     `
       INSERT INTO driver_routes
       (

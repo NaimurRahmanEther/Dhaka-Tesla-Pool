@@ -146,7 +146,12 @@ const completePool = async (client, poolId) => {
     [poolId],
   );
 
-  return result.rows[0];
+  const completed = result.rows[0];
+  const destination = completed.current_route?.path?.at(-1);
+  if (destination) {
+    await client.query("UPDATE vehicles SET current_location_id=$1 WHERE id=$2", [destination, completed.vehicle_id]);
+  }
+  return completed;
 };
 
 // Ride history

@@ -1,4 +1,5 @@
 const pool = require("../../database/db");
+const AppError = require("../../utils/AppError");
 
 // Create vehicle
 
@@ -87,21 +88,35 @@ const getActivePoolOccupiedSeats = async (vehicleId) => {
 // Update vehicle
 
 const updateVehicle = async (id, { model, capacity, currentLocationId }) => {
-  const result = await pool.query(
-    `
-      UPDATE vehicles
-      SET
-          model=COALESCE($1,model),
-          capacity=COALESCE($2,capacity),
-          current_location_id=
-          COALESCE($3,current_location_id)
-      WHERE id=$4
-      RETURNING *
-    `,
-    [model, capacity, currentLocationId, id],
-  );
-
-  return result.rows[0];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT id FROM vehicles WHERE id=$1 FOR UPDATE", [id]);
+    if (currentLocationId !== undefined) {
+      const active = await client.query("SELECT 1 FROM pools WHERE vehicle_id=$1 AND status='ACTIVE'", [id]);
+      if (active.rows.length) throw new AppError("Complete your active trip before changing your location", 409);
+    }
+    const result = await client.query(
+      `
+        UPDATE vehicles
+        SET
+            model=COALESCE($1,model),
+            capacity=COALESCE($2,capacity),
+            current_location_id=
+            COALESCE($3,current_location_id)
+        WHERE id=$4
+        RETURNING *
+      `,
+      [model, capacity, currentLocationId, id],
+    );
+    await client.query("COMMIT");
+    return result.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 // Update status
