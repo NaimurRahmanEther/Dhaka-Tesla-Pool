@@ -8,6 +8,24 @@ A ride-pooling service for Dhaka. Passengers request a ride, drivers run Teslas,
 
 Live frontend: [Dhaka Tesla Pool](https://dhaka-tesla-pool-umber.vercel.app) | Backend: [Render API](https://dhaka-tesla-pool-backend-1n45.onrender.com) | [Deployment settings](#deployment)
 
+![Dhaka Tesla Pool landing page](docs/screenshots/01-home.png)
+
+[Screenshots](#screenshots) · [System architecture](#architecture-diagram) · [Database design](#database-diagram) · [Docker setup](#docker-setup)
+
+## ▶ Video walkthrough (6 minutes)
+
+**[![Watch the 6-minute walkthrough](https://img.shields.io/badge/video-▶%20watch%20walkthrough-0ea5e9?style=for-the-badge)](LOOM_VIDEO_URL)**
+
+1. **0:00–1:00** — the problem, the users, and the core idea in my own words
+2. **1:00–3:00** — architecture, backend, frontend, database design, the ride/pool
+   lifecycle, one key decision, one trade-off, with the architecture diagram and ERD
+3. **3:00–6:00** — product tour: passenger flow, driver flow, shared-Tesla pooling,
+   fare and status, an edge case, and deployment
+
+- **Video link:** <LOOM_VIDEO_URL>
+- **Spoken script and shot list (timed, with on-screen cues):** [VIDEO_SCRIPT.md](VIDEO_SCRIPT.md)
+- **[Mermaid ERD](#database-diagram)** and **[architecture diagram](#architecture-diagram)** are embedded below and are shown in the video.
+
 ## The Pitch
 
 8:41 AM, Banani Road 11. Jashim is leaning against **Bullet**, his 4-seat Tesla. Nusrat books a ride to Mohakhali. Two minutes later Rafiq books almost the same route to Gulshan 1. The app figures out using the seeded road graph whether they can share a seat, split the fare fairly, and survive the ride. Then Shirin tries to grab the last seat thirty seconds later.
@@ -29,7 +47,7 @@ Jashim just wants to know who's riding and when he can go. Everyone else just wa
 | Passenger | **Rafiq** | Banani → Gulshan 1 |
 | Passenger | **Shirin** | Late arrival, fights for last seat |
 
-Seeds create locations and roads only, not these accounts or passwords. Register these users yourself for a demo; no shared demo credentials are published. Use this cast for demo, or bring your own — just be consistent. Avoid generic names like `user1`/`driver1`.
+Seeds create locations and roads only. Register these users yourself, or use the restored [demo-account script](backend/scripts/create-demo-accounts.js) against a disposable local database. The script contains public local-demo credentials and creates Jashim, Nusrat, and Rafiq accounts; it does not create Bullet or rides. Use this cast consistently throughout your demo.
 
 ---
 
@@ -41,14 +59,31 @@ dhaka-tesla-pool/
   frontend/                 React/Vite application
     vercel.json             SPA fallback for normal URLs
   render.yml                Render backend blueprint
+  docker-compose.yml        Local PostgreSQL, API, and Nginx frontend
+  docs/                     Architecture, database design, and screenshots
+  VIDEO_SCRIPT.md           Timed voiceover script for the walkthrough video
   README.md
 ```
 
 ---
 
-## Docker status
+## Docker setup
 
-This checkout has no Dockerfile or docker-compose.yml. Use the manual setup or the hosting configuration below. The previous Docker startup instructions do not apply to this version.
+Install Docker with Compose and start Docker Desktop. If `backend/.env` does not exist, copy `backend/.env.example` to it and set two different JWT signing secrets. Keep an existing private `.env` file intact.
+
+From the repository root:
+
+```bash
+docker compose up --build
+```
+
+Open the frontend at `http://localhost:5173`; the API health endpoint is `http://localhost:8000/health`. Ports 5173, 8000, and 5432 must be available; stop a conflicting local service or change its Compose host-port mapping.
+
+[Backend Dockerfile](backend/Dockerfile) and [frontend Dockerfile](frontend/Dockerfile) use Node 24. Compose runs PostgreSQL 16 with a persistent `postgres_data` volume. The backend runs migrations and location/road seeds before starting. Its container database settings override the hosted database fields in `backend/.env`, with `DB_HOST=postgres` and `DB_SSL=false`.
+
+[Nginx](frontend/nginx.conf) serves the frontend build, forwards `/api/*` to the backend, and supports refreshing normal frontend routes. Compose uses development cookie settings for local HTTP. This setup is separate from the Vercel/Render/Neon deployment.
+
+Compose configuration validation passed after recovery. Container startup still needs verification with Docker running.
 
 ---
 
@@ -186,6 +221,47 @@ Passengers cancel only REQUESTED/MATCHED rides. Drivers cancel an assigned passe
 
 ---
 
+## Screenshots
+
+These are the original project screenshots restored from Git. They document an earlier UI version: the route-change control, trip actions, and displayed pooled fares may differ from the current implementation described above.
+
+<details>
+<summary>Driver: vehicle availability and route planning</summary>
+
+![Driver vehicle and saved route](docs/screenshots/02-driver-route.png)
+
+</details>
+
+<details>
+<summary>Passenger: request a ride</summary>
+
+![Passenger selects pickup, destination, and seats](docs/screenshots/03-request-ride.png)
+
+</details>
+
+<details>
+<summary>Driver: earlier route-change preview</summary>
+
+![Earlier change-route-and-accept interface](docs/screenshots/04-change-route.png)
+
+</details>
+
+<details>
+<summary>Driver: shared route and passenger manifest</summary>
+
+![Active pool with passenger manifest and trip controls](docs/screenshots/05-active-trip.png)
+
+</details>
+
+<details>
+<summary>Passenger: ride status, fare, route, and timeline</summary>
+
+![Passenger ride details from the earlier demo](docs/screenshots/06-passenger-trip.png)
+
+</details>
+
+The restored [capture script](docs/capture-screenshots.mjs) targets the earlier UI and needs updated selectors before reuse. It creates demo data and advances trip states; use only with a disposable local database.
+
 ## Architecture
 
 ```
@@ -194,14 +270,38 @@ Browser (React + Vite)  →  Node.js API (Express)  →  PostgreSQL
 
 ### Architecture Diagram
 
+![System architecture showing React, Nginx, Express services, and PostgreSQL](docs/system-architecture.png)
+
+The original image describes the local Docker setup. The diagram below shows the hosted Vercel/Render/Neon setup.
+
 ```mermaid
 flowchart LR
-  Browser[Passenger or driver] --> Vercel[React / Vite on Vercel]
-  Vercel -->|HTTPS JSON and credentials| Render[Express API on Render]
-  Render -->|pg over verified TLS| Neon[(Neon PostgreSQL)]
+  Browser["Passenger / Driver browser<br/>Runs the React application"]
+
+  subgraph FrontendHost["Frontend hosting: Vercel"]
+    Frontend["React + Vite static build<br/>dhaka-tesla-pool-umber.vercel.app"]
+  end
+
+  subgraph BackendHost["Backend hosting: Render"]
+    API["Node.js + Express API<br/>dhaka-tesla-pool-backend-1n45.onrender.com<br/>Authentication, matching, pools and fares"]
+  end
+
+  subgraph DatabaseHost["Database hosting: Neon"]
+    DB[("PostgreSQL<br/>Users, vehicles, rides, pools and payments")]
+  end
+
+  Browser -->|Load application over HTTPS| Frontend
+  Browser -->|HTTPS JSON API requests and authentication| API
+  API -->|SQL via pg over verified TLS| DB
 ```
 
+Vercel serves the frontend files; the application running in the browser calls the Render API directly. Render connects to the private Neon database. These are the configured hosting targets; verify the deployed version before recording the walkthrough.
+
 ### Database diagram
+
+![Database design showing users, vehicles, rides, pools, fares, payments, and authentication](docs/database-design.png)
+
+The original database-design image shows the application tables and their fields. The Mermaid diagram below summarizes their relationships.
 
 ```mermaid
 erDiagram
@@ -225,7 +325,7 @@ erDiagram
 
 The ERD shows database relationships, not an assertion of one successful payment enforced by a unique constraint. Additional tables include token_blacklist and schema_migrations. Pool routes and fare breakdowns use JSONB.
 
-Screenshots/GIFs and the previously referenced docs/architecture.png and docs/erd.png are not present in this checkout. These embedded diagrams replace broken image references.
+The original diagrams are stored at [docs/system-architecture.png](docs/system-architecture.png) and [docs/database-design.png](docs/database-design.png).
 
 ### Tech stack
 
@@ -529,7 +629,7 @@ After pushing, verify both hosts deployed the intended commit. Check /health, a 
 - Locks protect seat claims and trip actions, but do not imply every API path is concurrency-safe. Add durable regression coverage for duplicate acceptance, passenger cancellation races, simultaneous route changes and joins, and payments.
 - UI request timeouts do not abort server work; add cancellation and server-side time limits.
 - Refresh tokens are stored as text; rotation and expiry cleanup are absent. Rate limiting, password reset, email verification, signing-key-strength checks, and consistent configurable expiry metadata remain improvements.
-- Add maintained screenshots/GIFs, reproducible integration tests, deployment smoke checks, and Docker support if required.
+- Refresh the restored screenshots for the current UI, add reproducible integration tests and deployment smoke checks, and verify the restored Docker setup end to end.
 
 ---
 
