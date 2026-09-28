@@ -14,6 +14,7 @@ import {
 } from '@/components/ui'
 import RouteSummary from '@/components/ride/RouteSummary'
 import useApi from '@/hooks/useApi'
+import usePolling from '@/hooks/usePolling'
 import { formatDateTime } from '@/lib/format'
 import locationService from '@/services/location.service'
 import routeService from '@/services/route.service'
@@ -36,6 +37,12 @@ export default function MyTeslaPage() {
   const nameFor = (id) => locations.data?.find((l) => l.id === id)?.name
   const noVehicle = vehicle.error?.status === 404
   const online = vehicle.data?.status === 'ONLINE'
+  const routeLocked = route.data?.locked === true
+  const routeUnavailable = route.loading || (route.error && route.error.status !== 404)
+  usePolling(() => {
+    vehicle.reload({ background: true })
+    route.reload({ background: true })
+  }, Boolean(vehicle.data && busy === null))
   async function register(event) {
     event.preventDefault()
     const next = {}
@@ -76,6 +83,7 @@ export default function MyTeslaPage() {
   }
   async function plan(event) {
     event.preventDefault()
+    if (routeLocked || routeUnavailable) return
     if (!destination) {
       setErrors({ destination: 'Choose a destination' })
       return
@@ -89,6 +97,7 @@ export default function MyTeslaPage() {
       vehicle.reload()
       route.reload()
       setDestination('')
+      setRouteLocation('')
       setNotice('Your planned route has been updated.')
     } catch (err) {
       setError(err.message)
@@ -244,7 +253,9 @@ export default function MyTeslaPage() {
           <Card>
             <h2 className="text-lg font-bold text-brand-900">Where are you heading?</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Update your current location and destination between trips. During an active trip, complete it first.
+              {routeLocked
+                ? 'Your route updates automatically for accepted passengers. Complete the trip or close the empty pool to edit it manually.'
+                : 'Choose your current location and destination for your next journey.'}
             </p>
             {route.loading ? (
               <div className="py-8">
@@ -258,10 +269,10 @@ export default function MyTeslaPage() {
               <div className="my-6 rounded-xl bg-canvas p-5">
                 <RouteSummary
                   pickup={nameFor(route.data.start_location_id)}
-                  destination={nameFor(route.data.destination_location_id)}
+                  destination={nameFor(route.data.destination_location_id) || 'No passengers remaining'}
                 />
                 <p className="mt-5 text-xs text-slate-500">
-                  {route.data.route.distance} km · Planned {formatDateTime(route.data.created_at)}
+                  {route.data.route.distance} km · {routeLocked ? 'Trip updated' : 'Planned'} {formatDateTime(route.data.created_at)}
                 </p>
               </div>
             ) : (
@@ -270,11 +281,11 @@ export default function MyTeslaPage() {
               </p>
             )}
             <form className="mt-5" noValidate onSubmit={plan}>
-              <fieldset disabled={busy !== null} className="space-y-5">
+              <fieldset disabled={busy !== null || routeLocked || Boolean(routeUnavailable)} className="space-y-5">
                 <Select
                   label="Current location"
                   options={options}
-                  value={routeLocation || String(vehicle.data.current_location_id)}
+                  value={routeLocked ? String(route.data.start_location_id) : routeLocation || String(vehicle.data.current_location_id)}
                   onChange={(e) => {
                     setRouteLocation(e.target.value)
                     setDestination('')
@@ -282,22 +293,23 @@ export default function MyTeslaPage() {
                   required
                 />
                 <Select
-                  label={route.data ? 'New destination' : 'Destination'}
+                  label={routeLocked ? 'Trip destination' : route.data ? 'New destination' : 'Destination'}
                   placeholder="Choose a destination"
                   options={options.filter(
-                    (o) => o.value !== (routeLocation || String(vehicle.data.current_location_id)),
+                    (o) => routeLocked || o.value !== (routeLocation || String(vehicle.data.current_location_id)),
                   )}
-                  value={destination}
+                  value={routeLocked ? String(route.data.destination_location_id ?? '') : destination}
                   onChange={(e) => setDestination(e.target.value)}
                   error={errors.destination}
                   required
                 />
                 <Button type="submit" loading={busy === 'plan'}>
                   <Icon name="route" />
-                  {route.data ? 'Update route' : 'Plan my route'}
+                  {routeLocked ? 'Route locked during trip' : route.data ? 'Update route' : 'Plan my route'}
                 </Button>
               </fieldset>
             </form>
+            {routeLocked && <LinkButton to="/active-trip" variant="secondary" className="mt-4">Manage active trip</LinkButton>}
           </Card>
         </div>
       )}

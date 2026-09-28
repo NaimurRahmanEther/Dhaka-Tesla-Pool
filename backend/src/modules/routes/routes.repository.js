@@ -31,11 +31,24 @@ const createDriverRoute = async ({
 const findRouteByDriverId = async (driverId) => {
   const result = await pool.query(
     `
-      SELECT *
-      FROM driver_routes
-      WHERE driver_id=$1
-      ORDER BY created_at DESC
-      LIMIT 1
+      SELECT * FROM (
+        SELECT pools.id, pools.driver_id,
+          vehicles.current_location_id AS start_location_id,
+          (pools.current_route->'path'->>-1)::integer AS destination_location_id,
+          COALESCE(pools.current_route, jsonb_build_object('path', jsonb_build_array(vehicles.current_location_id), 'distance', 0)) AS route,
+          pools.route_updated_at AS created_at, TRUE AS locked,
+          pools.id AS pool_id
+        FROM pools JOIN vehicles ON vehicles.id=pools.vehicle_id
+        WHERE pools.driver_id=$1 AND pools.status='ACTIVE'
+        UNION ALL
+        SELECT id, driver_id, start_location_id, destination_location_id,
+          route, created_at, FALSE AS locked, NULL::integer AS pool_id
+        FROM driver_routes
+        WHERE driver_id=$1 AND created_at > COALESCE(
+          (SELECT MAX(created_at) FROM pools WHERE driver_id=$1), '-infinity'::timestamp
+        )
+      ) AS available_routes
+      ORDER BY locked DESC, created_at DESC, id DESC LIMIT 1
     `,
     [driverId],
   );

@@ -16,7 +16,7 @@ const createRoute = async (driverId, data) => {
       throw new AppError("Driver vehicle not found", 404);
     }
     const active = await client.query("SELECT 1 FROM pools WHERE vehicle_id=$1 AND status='ACTIVE'", [vehicle.id]);
-    if (active.rows.length) throw new AppError("Complete your active trip before changing your location or destination", 409);
+    if (active.rows.length) throw new AppError("Complete your trip or cancel the empty pool before changing your location or destination", 409);
     const start = data.currentLocationId ?? vehicle.current_location_id;
     if (start === data.destinationLocationId) throw new AppError("Choose a destination different from your current location", 400);
 
