@@ -110,10 +110,18 @@ These images are supplied in [`docs/screenshots`](docs/screenshots). They show t
 
 ### Demo video
 
-> **Coming soon.** A screen recording of the full passenger and driver flow will be added here.
->
-> <!-- Replace the block below with the embedded player once the recording is uploaded. -->
-> `DEMO_VIDEO_URL_PLACEHOLDER`
+Watch the screen recording of the full passenger and driver flow:
+
+**[Open the demo video](https://drive.google.com/file/d/1Zle0fdd8ffFGGupJ43HypJAF6fygyr68/view?usp=sharing)**
+
+<iframe
+  src="https://drive.google.com/file/d/1Zle0fdd8ffFGGupJ43HypJAF6fygyr68/preview"
+  width="800"
+  height="450"
+  frameborder="0"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowfullscreen>
+</iframe>
 
 <details>
 <summary>Driver: vehicle availability and route planning</summary>

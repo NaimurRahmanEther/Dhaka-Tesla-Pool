@@ -1,6 +1,6 @@
 const graphService = require("../graph/graph.service");
 
-const MAX_DETOUR_DISTANCE = 5;
+const MAX_DETOUR_DISTANCE = 2;
 
 // Calculate detour
 
