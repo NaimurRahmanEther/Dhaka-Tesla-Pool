@@ -5,8 +5,6 @@ const poolingRepository = require("./pooling.repository");
 // The route optimiser measures the insertion route and applies the detour limit.
 const { findBestRoute, isDetourAcceptable } = require("./pooling.route.optimizer");
 
-const graphService = require("../graph/graph.service");
-
 const fareService = require("../fare/fare.service");
 
 const AppError = require("../../utils/AppError");
@@ -67,26 +65,24 @@ const addPassengerToPool = async ({ poolId, ride }) => {
       throw new AppError("Passenger creates too much detour", 400);
     }
 
-    const passengerDistance = await graphService.calculateRouteDistance([
-      ride.pickup_location_id,
-      ride.destination_location_id,
-    ]);
-
-    const fareResult = await fareService.calculateRideFare({
-      distance: passengerDistance,
-      isPool: false,
-    });
-
+    // The fare is not worked out here. Adding a passenger lengthens the route
+    // for everyone already aboard, so this rider's fare - and theirs - is only
+    // knowable once the pool is repriced as a whole below. Pricing the joiner
+    // off their own pickup-to-destination leg, as this used to, would show them
+    // a fare that ignores the detour they are about to cause.
     const poolRide = await poolingRepository.addRideToPool(client, {
       poolId,
       rideId: ride.id,
       seatsAllocated: ride.seats_requested,
     });
 
+    // Only the lifecycle move is needed here. This is what makes the ride
+    // visible to refreshPoolFares, which filters on MATCHED / DRIVER_ARRIVED /
+    // ONGOING. It writes the real fare a few lines below, overwriting the null.
     const updatedRide = await poolingRepository.confirmRideInPool(client, {
       rideId: ride.id,
-      fare: fareResult.fare,
-      fareBreakdown: fareResult,
+      fare: null,
+      fareBreakdown: null,
     });
 
     const updatedPool = await poolingRepository.updatePoolRoute(client, {

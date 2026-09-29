@@ -1,5 +1,8 @@
 const pool = require("../../database/db");
 
+const { rebuildPoolRoute } = require("../pools/pool.route.service");
+const { refreshPoolFares } = require("../fare/fare.service");
+
 // Create ride request
 
 const createRide = async ({
@@ -107,6 +110,19 @@ const cancelRide = async ({ rideId, actorId }) => {
   try {
     await client.query("BEGIN");
 
+    // Read before deleting. Once the membership row is gone it can no longer
+    // say which pool was serving this ride, and a pool's route is derived from
+    // the rides still in it - so the pool has to be identified while the link
+    // that identifies it still exists.
+    const memberships = await client.query(
+      `
+        SELECT pool_id
+        FROM pool_rides
+        WHERE ride_id=$1
+      `,
+      [rideId],
+    );
+
     await client.query(
       `
         DELETE FROM pool_rides
@@ -129,6 +145,15 @@ const cancelRide = async ({ rideId, actorId }) => {
 
     if (!rideResult.rows.length) {
       throw new Error("Ride cancellation failed");
+    }
+
+    // The ride is already marked cancelled, so the rebuild sees it as no longer
+    // aboard and plans the route around the passengers who are left. Their
+    // fares are then recalculated against that new route, because a fare is a
+    // share of the road actually driven and the road just changed.
+    for (const { pool_id } of memberships.rows) {
+      await rebuildPoolRoute(client, pool_id);
+      await refreshPoolFares(client, pool_id);
     }
 
     await client.query(

@@ -2,7 +2,12 @@ const paymentRepository = require("./payment.repository");
 const AppError = require("../../utils/AppError");
 
 const makePayment = async ({ ride, method }) => {
-  if (!ride.fare || ride.fare <= 0) {
+  // Postgres NUMERIC arrives as a string, so the fare is coerced before it is
+  // compared. A string of "0.00" is truthy, which would otherwise let an
+  // unpayable ride through the check below.
+  const fare = Number(ride.fare);
+
+  if (!Number.isFinite(fare) || fare <= 0) {
     throw new AppError("Ride fare not available", 400);
   }
 
@@ -21,7 +26,7 @@ const makePayment = async ({ ride, method }) => {
   const payment = await paymentRepository.createPayment({
     rideId: ride.id,
     passengerId: ride.passenger_id,
-    amount: ride.fare,
+    amount: fare,
     method,
   });
 

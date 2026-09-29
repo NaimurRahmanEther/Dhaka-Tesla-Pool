@@ -13,7 +13,7 @@ CREATE TABLE payments (
     id SERIAL PRIMARY KEY,
     ride_id INTEGER NOT NULL,
     passenger_id INTEGER NOT NULL,
-    amount INTEGER NOT NULL,
+    amount NUMERIC(10, 2) NOT NULL,
     method payment_method DEFAULT 'CASH',
     status payment_status DEFAULT 'PENDING',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

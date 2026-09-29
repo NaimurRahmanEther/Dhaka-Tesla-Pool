@@ -3,7 +3,8 @@ const tripRepository = require("./trip.repository");
 const pool = require("../../database/db");
 
 const AppError = require("../../utils/AppError");
-const graphService = require("../graph/graph.service");
+const { rebuildPoolRoute } = require("../pools/pool.route.service");
+const { refreshPoolFares } = require("../fare/fare.service");
 
 // Check out a pool for a driver-side action. Ownership and state are answered
 // separately, so a completed own pool is a 409 and not a 403.
@@ -206,7 +207,7 @@ const updatePassenger = async (poolId, rideId, driverId, action) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const activePool = await lockOwnedActivePool(client, poolId, driverId);
+    await lockOwnedActivePool(client, poolId, driverId);
     const found = await client.query(
       `SELECT rides.* FROM rides JOIN pool_rides ON pool_rides.ride_id=rides.id
        WHERE pool_rides.pool_id=$1 AND rides.id=$2 FOR UPDATE OF rides`, [poolId, rideId],
@@ -225,14 +226,11 @@ const updatePassenger = async (poolId, rideId, driverId, action) => {
     const result = await client.query("UPDATE rides SET " + changes[action] + " WHERE id=$1 RETURNING *", [rideId]);
     if (action === "cancel") {
       await client.query("DELETE FROM pool_rides WHERE pool_id=$1 AND ride_id=$2", [poolId, rideId]);
-      const remaining = await client.query(
-        `SELECT pickup_location_id, destination_location_id FROM rides
-         JOIN pool_rides ON pool_rides.ride_id=rides.id WHERE pool_rides.pool_id=$1`, [poolId],
-      );
-      const stops = new Set(remaining.rows.flatMap((r) => [r.pickup_location_id, r.destination_location_id]));
-      const path = (activePool.current_route?.path ?? []).filter((stop, i) => i === 0 || stops.has(stop));
-      const route = remaining.rows.length ? { path, distance: await graphService.calculateRouteDistance(path) } : null;
-      await client.query("UPDATE pools SET current_route=$1, route_updated_at=CURRENT_TIMESTAMP WHERE id=$2", [route ? JSON.stringify(route) : null, poolId]);
+      // One passenger fewer means a different set of stops to serve and a
+      // different set of people in the car, so the route is planned again from
+      // the riders still aboard and their fares are worked out against it.
+      await rebuildPoolRoute(client, poolId);
+      await refreshPoolFares(client, poolId);
     }
     await tripRepository.createRideHistory(client, {
       rideId, actorId: driverId, action: { arrive: "DRIVER_ARRIVED", start: "STARTED", cancel: "CANCELLED" }[action],

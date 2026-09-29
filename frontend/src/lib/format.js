@@ -4,12 +4,14 @@ import { CANCELLABLE_RIDE_STATUSES } from '@/lib/constants'
 // computed by the backend and stored on the ride, and this file only reshapes
 // what the server already sent.
 
-// Money is whole Taka, always an integer from the backend. Render it as such -
-// never introduce decimals into the display path.
+// Money carries to the poisha, so a fare can be fractional: a shared segment
+// split three ways is 26.67, not 26. Postgres NUMERIC also arrives as a string,
+// so it is coerced before formatting. Two decimal places, always, so a column
+// of fares does not jitter as the numbers change width.
 export function formatTaka(value) {
   const amount = Number(value)
   if (!Number.isFinite(amount)) return '—'
-  return String(Math.trunc(amount))
+  return amount.toFixed(2)
 }
 
 // Renders ISO timestamps in a readable local format. A missing value is

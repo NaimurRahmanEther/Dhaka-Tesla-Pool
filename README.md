@@ -48,7 +48,7 @@ This project models that problem using a small road graph of Dhaka. A booking mu
 | First-passenger route change | The driver can accept any reachable first passenger's route with enough available seats, using **Change route and accept** when it does not fit the original plan. From the second passenger onward, acceptance depends on the extra distance compared with the current shared route. |
 | Pooling | Insert pickup/drop-off stops, enforce the 2 km incremental detour rule, and check seats in a database transaction. Passengers can also join an existing pool using its number. |
 | Trip management | Driver actions move eligible rides through arrival, start, and completion. The active-trip screen includes a passenger manifest, occupancy, and full shared route. |
-| Fares | Store and display base fare, distance charge, pool discount, and total in whole BDT. Calculation uses the passenger's own shortest-path distance. |
+| Fares | Store and display base fare, distance charge, pool discount, and total to the poisha. The pool's driven route is priced segment by segment; a segment shared by several riders is split between them, and a booking of several seats claims several seats' share of that road. |
 | Payments and history | Record `CASH` or `TESLA_WALLET` as a simulated payment for a completed ride; view payment records, passenger history, and completed driver trips. |
 | Interface | Responsive role-specific navigation, shared controls, search/filtering, loading/error/empty states, password visibility, action confirmations, and manual Refresh controls. |
 | Operations | Database-aware health endpoint, SQL migrations, repeatable reference-data seeds, Docker Compose, and unit/integration test scripts. |
@@ -65,13 +65,22 @@ Cancellation is available only in `REQUESTED` or `MATCHED`. Creating a request d
 
 ### Fares
 
-A passenger's fare is stored and displayed as whole BDT, calculated from that passenger's own shortest-path distance:
+A passenger's fare follows one rule:
 
 ```text
 passenger fare = base fare + distance charge - pool discount
 ```
 
-Pooled journeys are priced individually per passenger. The first passenger accepted into a pool pays the solo fare; later joiners receive a discount on their distance charge only, and existing fares are not retrospectively repriced.
+What changed is what `distance charge` is measured against. A pool is priced segment by segment along the route the driver actually drives, and each segment is paid for by whoever is in the car while it is driven:
+
+- A segment with one rider aboard is charged to that rider in full.
+- A segment with several riders aboard is split between them. A booking of several seats claims several seats' share of that road, so two seats pays double the one-seat share.
+- The driver's drive to the first pickup carries nobody and is billed to no one.
+- Money carries to the poisha (1 BDT = 100 poisha) and all arithmetic runs in integer poisha, so a segment shared three ways is 33.34 / 33.33 / 33.33 and the shares still sum to 100.00. Fares are stored as `NUMERIC(10,2)`.
+
+The 25% pool discount is earned per rider and only by a rider who shared at least one segment. It comes off that rider's own road charge, never the base fare, so the base still covers the driver's fixed cost of making the trip. A rider who travels a private leg the whole way shares nothing and pays the full rate.
+
+Because a rider's share depends on who else is in the car, **every rider in a pool is repriced whenever its membership or route changes**. A fare is not locked at match time: the moment a second passenger is accepted, the first passenger's fare moves too, because the two of them now share road. Adding a passenger can also lengthen the road an existing passenger travels, and that is billed to whoever is aboard for it rather than dumped on one person.
 
 ### Passenger and driver capabilities
 
@@ -475,7 +484,7 @@ Use separate browser profiles or a normal/private window for the driver and pass
 3. Sign in as Passenger One and request **Banani -> Mohakhali**, one seat.
 4. As the driver, open **Ride requests** and select **Refresh**. The request exceeds the original route's 2 km detour limit. Choose **Change route and accept** to explicitly replace the unused plan with **Banani -> Gulshan -> Mohakhali**, 8 km.
 5. As Passenger Two, request **Gulshan -> Mohakhali**, one seat. The driver can accept it into the same pool. Alternatively, Passenger Two can use **Join a pool** with the pool number shown in the driver's active trip.
-6. Refresh both trip screens. The driver sees two occupied seats and two remaining. Passenger One's 8 km first-passenger fare is **210 BDT**; Passenger Two's 5 km pooled fare is **125 BDT**. The first fare is not retrospectively discounted.
+6. Refresh both trip screens. The driver sees two occupied seats and two remaining. The 8 km route is priced as two segments: Banani -> Gulshan (3 km) carries only Passenger One and is charged to them in full, while Gulshan -> Mohakhali (5 km) carries both and is split. Passenger One's fare is **132.50 BDT** and Passenger Two's is **87.50 BDT**. Both earned the 25% discount, and Passenger One's fare was repriced downward when the second passenger joined and their road became shared.
 7. As the driver, select **Mark as arrived**, then start and complete the trip in order. Refresh the passenger screen after each change.
 8. As each passenger, record a payment for the completed ride using `CASH` or `TESLA_WALLET`. Review payments and history; the driver can review the completed trip and plan another route.
 
@@ -610,7 +619,7 @@ See the routing and matching notes above for request shapes. Paths such as `/api
 
 - **Demo scope:** only eight predefined locations; no address search, live GPS, traffic-aware routing, per-stop navigation, real payment processing, wallet balance, driver verification, or admin console.
 - **Trip granularity:** arrival/start/completion act on eligible rides in a pool together. The model does not track each vehicle's progress through individual pickup/drop-off stops. An `ACTIVE` pool can still receive requests after some rides have started.
-- **Fare policy:** the first passenger pays the solo fare; later joiners receive a discount on their distance charge only. Existing fares are not repriced, and a request for several seats still receives one distance-based fare. Matching writes the fare after the assignment transaction, leaving a consistency gap if that final write fails.
+- **Fare policy:** a segment shared by several riders is split between them and a multi-seat booking claims a proportional share, but the split is a straight division of that segment's cost and ignores how much each rider detours the others. Riders are repriced on every membership or route change, which means a passenger's fare can still move after they have seen it. The 25% discount is applied on top of the split, so a fully shared rider is discounted twice over - once by sharing the road and once by the percentage.
 - **Concurrency/integrity:** there is no unique ride-only pool membership constraint or atomic cross-vehicle claim. Payment deduplication is a check followed by an insert, without a unique ride constraint. Matching uses the pool's capacity snapshot, while direct pool joining checks the live vehicle capacity. These paths need stronger shared invariants before production use.
 - **Cancellation:** seats are removed, but the pool route is not recomputed and an empty active pool is not closed automatically. Cancelling all its rides can leave the driver unable to complete or replace that pool through the normal UI.
 - **History:** direct passenger pool-join updates the ride but does not add an `ACCEPTED` history event. The standard driver-accept path does record it.
@@ -621,7 +630,7 @@ See the routing and matching notes above for request shapes. Paths such as `/api
 
 1. Make ride claiming, fare persistence, and lifecycle checks atomic across all booking paths; add database constraints and concurrent regression tests for duplicate claims, capacity changes, and payments.
 2. Recalculate routes after cancellation, close empty pools, record join events, and gate new bookings according to trip progress.
-3. Decide and test a consistent pricing policy for multiple seats and first-passenger discounts; add idempotent payment handling before integrating a real provider.
+3. Add idempotent payment handling before integrating a real provider, and add regression tests that pin the split, the per-rider discount, and the reprice-on-join behaviour.
 4. Expand auth, authorization, fare, payment, and browser-flow tests; run them alongside lint/build in CI.
 5. Add configurable production secrets/expiry handling, refresh rotation/cleanup, rate limits, database SSL support, backups, and a controlled migration step.
 6. Add pagination and graph/path caching, then evaluate live updates and real mapping data against the needs of a larger deployment.

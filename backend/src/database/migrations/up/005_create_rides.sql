@@ -7,7 +7,12 @@ CREATE TYPE ride_status AS ENUM (
     'CANCELLED'
 );
 
--- Money is whole Taka, so `fare` is INTEGER to match `payments.amount`.
+-- Money carries to the poisha, so `fare` is NUMERIC(10,2) to match
+-- `payments.amount`. A shared trip's cost is split between riders and the exact
+-- share is rarely a whole Taka, so an INTEGER would throw the fraction away.
+-- NUMERIC rather than FLOAT: money must not sit in binary floating point, where
+-- 39.38 has no exact representation. Migration 014 widens the same two columns
+-- on databases created before this, and is a no-op on a fresh install.
 -- `fare_breakdown` keeps the line items, and each stage has its own timestamp.
 CREATE TABLE rides (
     id SERIAL PRIMARY KEY,
@@ -15,7 +20,7 @@ CREATE TABLE rides (
     pickup_location_id INTEGER NOT NULL,
     destination_location_id INTEGER NOT NULL,
     seats_requested INTEGER NOT NULL DEFAULT 1 CHECK (seats_requested > 0),
-    fare INTEGER,
+    fare NUMERIC(10, 2),
     fare_breakdown JSONB,
     status ride_status DEFAULT 'REQUESTED',
     requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
