@@ -1,9 +1,9 @@
 // Public local-demo credentials; never use for real accounts.
 const DEMO_PASSWORD = "DemoRide2026!";
 const DEMO_ACCOUNTS = [
-  { name: "Jashim Demo", email: "jashim.demo@example.test", role: "DRIVER" },
-  { name: "Nusrat Demo", email: "nusrat.demo@example.test", role: "PASSENGER" },
-  { name: "Rafiq Demo", email: "rafiq.demo@example.test", role: "PASSENGER" },
+  { name: "Demo Driver", email: "driver@example.test", role: "DRIVER" },
+  { name: "Passenger One", email: "passenger1@example.test", role: "PASSENGER" },
+  { name: "Passenger Two", email: "passenger2@example.test", role: "PASSENGER" },
 ];
 
 async function createDemoAccounts(base = "http://localhost:8000") {

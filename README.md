@@ -1,114 +1,322 @@
 # Dhaka Tesla Pool
 
-**Share a seat. Split the fare. Survive Dhaka traffic.**
+Dhaka Tesla Pool is a full-stack ride-pooling MVP for passengers and drivers travelling between predefined Dhaka locations. Passengers request seats, drivers accept compatible journeys, and the application calculates a shared route, tracks trip stages, explains each fare, and records a simulated payment after completion.
 
-A ride-pooling service for Dhaka. Passengers request a ride, drivers run Teslas, and people heading roughly the same way share one car — so everyone pays less than they would alone, and fewer cars are on the road.
-
----
-
-Live frontend: [Dhaka Tesla Pool](https://dhaka-tesla-pool-umber.vercel.app) | Backend: [Render API](https://dhaka-tesla-pool-backend-1n45.onrender.com) | [Deployment settings](#deployment)
+The project demonstrates graph-based routing, pickup/drop-off insertion, role-based access, PostgreSQL transactions, and a responsive React interface. Vehicle registration is a local application feature; there is no Tesla vehicle API integration.
 
 ![Dhaka Tesla Pool landing page](docs/screenshots/01-home.png)
 
-[Screenshots](#screenshots) · [System architecture](#architecture-diagram) · [Database design](#database-diagram) · [Docker setup](#docker-setup)
+## Contents
 
-## ▶ Video walkthrough (6 minutes)
+- [Problem statement](#problem-statement)
+- [Features implemented](#features-implemented)
+- [Screenshots](#screenshots)
+- [Architecture](#architecture)
+- [Database design](#database-design)
+- [Tech stack](#tech-stack)
+- [Project structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Environment variables](#environment-variables)
+- [Local setup](#local-setup)
+- [Docker setup](#docker-setup)
+- [Migrations and seeds](#migrations-and-seeds)
+- [Demo credentials and walkthrough](#demo-credentials-and-walkthrough)
+- [Deployment and hosting](#deployment-and-hosting)
+- [API overview](#api-overview)
+- [Key decisions and trade-offs](#key-decisions-and-trade-offs)
+- [Known limitations](#known-limitations)
+- [Next improvements](#next-improvements)
+- [AI Usage](#ai-usage)
 
-**[![Watch the 6-minute walkthrough](https://img.shields.io/badge/video-▶%20watch%20walkthrough-0ea5e9?style=for-the-badge)](LOOM_VIDEO_URL)**
+The [frontend documentation](frontend/README.md) explains the client implementation, and the API overview below summarises the endpoint groups.
 
-1. **0:00–1:00** — the problem, the users, and the core idea in my own words
-2. **1:00–3:00** — architecture, backend, frontend, database design, the ride/pool
-   lifecycle, one key decision, one trade-off, with the architecture diagram and ERD
-3. **3:00–6:00** — product tour: passenger flow, driver flow, shared-Tesla pooling,
-   fare and status, an edge case, and deployment
+## Problem statement
 
-- **Video link:** <LOOM_VIDEO_URL>
-- **Spoken script and shot list (timed, with on-screen cues):** [VIDEO_SCRIPT.md](VIDEO_SCRIPT.md)
-- **[Mermaid ERD](#database-diagram)** and **[architecture diagram](#architecture-diagram)** are embedded below and are shown in the video.
+A driver with spare seats and passengers travelling in a similar direction need a way to coordinate a shared journey. Assigning passengers by availability alone can produce excessive detours, overbooked vehicles, unclear fares, and inconsistent trip states.
 
-## The Pitch
+This project models that problem using a small road graph of Dhaka. A booking must fit the vehicle's capacity and route, preserve pickup-before-drop-off ordering, and expose a clear progression from request to completion. Drivers and passengers see their own workflows, while the backend owns routing, authorization, fares, and persisted state.
 
-8:41 AM, Banani Road 11. Jashim is leaning against **Bullet**, his 4-seat Tesla. Nusrat books a ride to Mohakhali. Two minutes later Rafiq books almost the same route to Gulshan 1. The app figures out using the seeded road graph whether they can share a seat, split the fare fairly, and survive the ride. Then Shirin tries to grab the last seat thirty seconds later.
+## Features implemented
 
-- **Nusrat** pays **210 BDT** initially for Banani -> Mohakhali (8 km), then **170 BDT** when Rafiq joins.
-- **Rafiq** pays **95 BDT** for Banani -> Gulshan (3 km): 50 base + 60 distance - 15 pool discount.
-- **Shirin** gets the last seat or is told how many seats remain
+| Area | Implemented behavior |
+| --- | --- |
+| Accounts | Register as `PASSENGER` or `DRIVER`, log in/out, restore sessions, and update name/email. Passwords use bcrypt; protected endpoints use JWT and role checks. |
+| Passenger requests | Choose pickup/destination from seeded locations, request a positive number of seats, list rides, inspect a ride's route/fare/timeline, and cancel before driver arrival. |
+| Driver vehicle | Register one vehicle through the normal application flow, edit its details, set current location, and switch online/offline. |
+| Driver route planning | Calculate and save a route from a selected current location to a destination. Planning a replacement route is blocked while a pool is active. |
+| Matching | Show drivers waiting requests with seat availability and route compatibility. Drivers can accept a specific request; a separate API endpoint supports automatic candidate ranking. |
+| First-passenger route change | The driver can accept any reachable first passenger's route with enough available seats, using **Change route and accept** when it does not fit the original plan. From the second passenger onward, acceptance depends on the extra distance compared with the current shared route. |
+| Pooling | Insert pickup/drop-off stops, enforce the 2 km incremental detour rule, and check seats in a database transaction. Passengers can also join an existing pool using its number. |
+| Trip management | Driver actions move eligible rides through arrival, start, and completion. The active-trip screen includes a passenger manifest, occupancy, and full shared route. |
+| Fares | Store and display base fare, distance charge, pool discount, and total in whole BDT. Calculation uses the passenger's own shortest-path distance. |
+| Payments and history | Record `CASH` or `TESLA_WALLET` as a simulated payment for a completed ride; view payment records, passenger history, and completed driver trips. |
+| Interface | Responsive role-specific navigation, shared controls, search/filtering, loading/error/empty states, password visibility, action confirmations, and manual Refresh controls. |
+| Operations | Database-aware health endpoint, SQL migrations, repeatable reference-data seeds, Docker Compose, and unit/integration test scripts. |
 
-Jashim just wants to know who's riding and when he can go. Everyone else just wants to get where they're going, pay a fair price, and not accidentally make a new friend.
+The normal ride lifecycle is:
 
----
+```text
+REQUESTED -> MATCHED -> DRIVER_ARRIVED -> ONGOING -> COMPLETED
+    |           |
+    +-----------+-----> CANCELLED
+```
 
-## Demo scenario
+Cancellation is available only in `REQUESTED` or `MATCHED`. Creating a request does not automatically dispatch a driver. An acceptance or explicit pool join confirms the fare and assignment.
 
-| Role | Name | Details |
-|------|------|---------|
-| Driver | **Jashim** | Owns **Bullet** (4 seats) |
-| Passenger | **Nusrat** | Banani → Mohakhali |
-| Passenger | **Rafiq** | Banani → Gulshan 1 |
-| Passenger | **Shirin** | Late arrival, fights for last seat |
+### Fares
 
-Seeds create locations and roads only. Register these users yourself, or use the restored [demo-account script](backend/scripts/create-demo-accounts.js) against a disposable local database. The script contains public local-demo credentials and creates Jashim, Nusrat, and Rafiq accounts; it does not create Bullet or rides. Use this cast consistently throughout your demo.
+A passenger's fare is stored and displayed as whole BDT, calculated from that passenger's own shortest-path distance:
 
----
+```text
+passenger fare = base fare + distance charge - pool discount
+```
 
-## Repository Layout
+Pooled journeys are priced individually per passenger. The first passenger accepted into a pool pays the solo fare; later joiners receive a discount on their distance charge only, and existing fares are not retrospectively repriced.
+
+### Passenger and driver capabilities
+
+| Passenger | Driver |
+| --- | --- |
+| Register and log in; restore a session | Register and log in; register and edit one vehicle |
+| Request a ride with pickup, destination, and seats | Go online/offline and set the current location |
+| See the estimated fare once matched | Plan and save a route; browse compatible waiting requests |
+| Track status through to completion or cancellation | Accept a request, with or without changing the route |
+| Join an existing pool by pool number | View the passenger manifest and seat occupancy |
+| Cancel while `REQUESTED` or `MATCHED` | Mark arrival, start, and completion in order |
+| Record a payment and review ride history | Review completed trips and plan the next route |
+
+### First request versus later requests
+
+For the **first ride request accepted into a new pool**, the driver can choose any reachable pickup and destination, provided the vehicle has enough seats. If the request does not fit the driver's original plan, **Change route and accept** explicitly replaces that plan with a route serving the first passenger. The original plan's 2 km detour limit does not prevent this explicit replacement.
+
+For the **second and each later ride request**, the backend inserts the new passenger's pickup and drop-off into the current shared route and compares the total distances:
+
+```text
+Extra distance = proposed shared-route distance - current shared-route distance
+```
+
+| Distance difference | Acceptance |
+| --- | --- |
+| At most 2 km | Allowed if enough seats are available and a valid route exists. |
+| More than 2 km | Rejected because the new passenger adds too much travel distance. |
+
+For example, if the current shared route is **8 km**, a second request producing a **10 km** route adds **2 km** and can be accepted. A request producing an **11 km** route adds **3 km** and is rejected. This compares the full shared route, not just the new passenger's individual travel distance.
+
+After each acceptance, the updated route becomes the baseline for the next request. The driver cannot use **Change route and accept** to bypass this limit once a pool is active.
+
+## Screenshots
+
+These images are supplied in [`docs/screenshots`](docs/screenshots). They show the local demo flow; ride and pool IDs depend on the database contents. Still screenshots are included; there is no GIF asset in the repository.
+
+### Demo video
+
+> **Coming soon.** A screen recording of the full passenger and driver flow will be added here.
+>
+> <!-- Replace the block below with the embedded player once the recording is uploaded. -->
+> `DEMO_VIDEO_URL_PLACEHOLDER`
+
+<details>
+<summary>Driver: vehicle availability and route planning</summary>
+
+![Driver vehicle and saved Banani-to-Gulshan route](docs/screenshots/02-driver-route.png)
+
+</details>
+
+<details>
+<summary>Passenger: request a ride</summary>
+
+![Passenger selects Banani, Mohakhali, and one seat](docs/screenshots/03-request-ride.png)
+
+</details>
+
+<details>
+<summary>Driver: preview a route change before accepting the first passenger</summary>
+
+![Explicit change-route-and-accept action with replacement route preview](docs/screenshots/04-change-route.png)
+
+</details>
+
+<details>
+<summary>Driver: shared route, passenger manifest, and trip actions</summary>
+
+![Active pool with two passengers and arrival, start, and completion controls](docs/screenshots/05-active-trip.png)
+
+</details>
+
+<details>
+<summary>Passenger: ride status, fare breakdown, route, and timeline</summary>
+
+![Passenger ride detail with 210 BDT fare and shared route](docs/screenshots/06-passenger-trip.png)
+
+</details>
+
+Before running the supplied capture script, note that it creates demo data and advances a trip: see [demo credentials and walkthrough](#demo-credentials-and-walkthrough).
+
+## Architecture
+
+![System architecture showing the React client, Nginx, Express services, and PostgreSQL](docs/system-architecture.png)
+
+In local development, Vite serves the frontend on port `5173`, and the browser calls Express on port `8000`. In Docker, Nginx serves the built frontend and forwards `/api/*` to `backend:8000`, stripping `/api`. For example, browser request `/api/auth/login` becomes backend request `/auth/login`.
+
+When hosted, the two tiers are split across providers: the built frontend is a static site on **Vercel** and the Express API is a Node web service on **Render**, so the browser calls the API's absolute `VITE_API_URL` across origins instead of using the Nginx `/api` proxy. The database is **Neon** PostgreSQL, reached over TLS. See [deployment and hosting](#deployment-and-hosting).
+
+Backend modules follow `route -> middleware -> controller -> service -> repository -> PostgreSQL`. Middleware handles authentication, roles, and request-body validation; services implement business rules; repositories contain parameterized SQL. The graph and fare modules are internal services rather than public endpoints.
+
+The frontend uses React context for authentication, service files for endpoint calls, and one shared HTTP client for bearer tokens, cookies, response parsing, and one refresh/retry after an expired access token. Access tokens stay in memory; refresh tokens use an HttpOnly cookie. Screens load data on entry and refresh after actions or when the user selects Refresh.
+
+## Database design
+
+![Database ERD for users, vehicles, locations, routes, rides, pools, payments, and authentication](docs/database-design.png)
+
+The supplied ERD shows the 12 application tables. The migration runner also creates `schema_migrations` to track applied SQL files.
+
+| Tables | Responsibility |
+| --- | --- |
+| `users`, `vehicles` | Account roles and driver vehicle details. The service checks for an existing vehicle before registration. |
+| `locations`, `road_edges` | Named locations and weighted road links used to build an undirected graph. |
+| `driver_routes` | Saved driver plans, including JSONB path and distance. |
+| `rides` | Passenger requests, seats, status timestamps, integer fare, and JSONB fare breakdown. |
+| `pools`, `pool_rides` | Vehicle/driver journeys and passenger assignments; route snapshots and allocated seats. |
+| `ride_history` | Lifecycle events and the user responsible for each event. |
+| `payments` | Recorded payment amount, method, and status for a passenger's ride. |
+| `refresh_tokens`, `token_blacklist` | Stored refresh sessions and revoked token records. |
+
+Relationships are enforced with foreign keys. `pool_rides` is the pool-to-ride association; `(pool_id, ride_id)` is unique. This does **not** enforce that a ride can belong to only one pool across concurrent requests. Additional integrity gaps are documented under [known limitations](#known-limitations).
+
+## Tech stack
+
+Versions below describe the repository's package declarations and Docker images.
+
+| Layer | Technologies |
+| --- | --- |
+| Frontend | JavaScript ES modules, React 19.2, React Router 7, Vite 8.3, Tailwind CSS 4.3 |
+| Backend | Node.js, CommonJS JavaScript, Express 5.2, `pg` 8.23 |
+| Validation and auth | Zod 4.6, bcrypt 6, jsonwebtoken 9, cookie-parser, CORS |
+| Persistence | PostgreSQL 16, handwritten SQL migrations, JSONB route/fare snapshots |
+| Linting | ESLint 10, `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh` |
+| Containers | Docker Compose, Node 24 Alpine images, PostgreSQL 16 Alpine, Nginx Alpine |
+| Hosting | Vercel (frontend), Render (backend), Neon (PostgreSQL) |
+
+The application uses browser `fetch` and local UI components. There is no ORM, external mapping service, payment gateway, or Tesla SDK in the dependency list.
+
+## Project structure
 
 ```text
 dhaka-tesla-pool/
-  backend/                  Express API and PostgreSQL migrations
-  frontend/                 React/Vite application
-    vercel.json             SPA fallback for normal URLs
-  render.yml                Render backend blueprint
-  docker-compose.yml        Local PostgreSQL, API, and Nginx frontend
-  docs/                     Architecture, database design, and screenshots
-  VIDEO_SCRIPT.md           Timed voiceover script for the walkthrough video
-  README.md
+|-- README.md                       Project overview and operating guide
+|-- docker-compose.yml              PostgreSQL, backend, frontend services
+|-- render.yml                      Render Blueprint for the hosted backend API
+|-- backend/
+|   |-- .env.example                Safe configuration template
+|   |-- Dockerfile                  Migrate, seed, then start the API
+|   |-- package.json                Backend commands and dependencies
+|   |-- scripts/
+|   |   `-- create-demo-accounts.js  Local demo account registration
+|   `-- src/
+|       |-- app.js                  Express routes and middleware
+|       |-- server.js               DB check and HTTP listener
+|       |-- config/env.js           Environment loading and required checks
+|       |-- database/               Connection, migration runner, and seeds
+|       |   |-- migrations/up/      12 forward SQL migrations
+|       |   |-- migrations/down/    12 matching rollback SQL files
+|       |   `-- seeds/              Locations and road-edge reference data
+|       |-- middleware/             Auth, roles, validation, error handling
+|       |-- modules/
+|       |   |-- auth/ users/ vehicles/ location/
+|       |   |-- graph/              Dijkstra and the in-memory road graph
+|       |   |-- routes/ rides/ matching/ pools/
+|       |   |-- trips/ fare/ payment/ history/
+|       `-- utils/                  Error and response helpers
+|-- frontend/
+|   |-- .env.example                Public API base URL template
+|   |-- Dockerfile                  Vite build and Nginx runtime
+|   |-- nginx.conf                  SPA fallback and /api proxy
+|   |-- vercel.json                 Vercel SPA fallback rewrite
+|   `-- src/
+|       |-- api/                    Shared fetch client and response parser
+|       |-- context/                Auth provider and context
+|       |-- routes/                 Route table and access guards
+|       |-- pages/                  Public, auth, passenger, driver, account
+|       |-- components/
+|       |   |-- ui/                 Buttons, inputs, cards, states
+|       |   |-- layout/             Shell, navbar, dashboard, containers
+|       |   |-- ride/               Route, fare, and history presentation
+|       |   `-- driver/             Request card and passenger manifest
+|       |-- hooks/                  Data loading, polling, and auth hooks
+|       |-- services/               Backend endpoint adapters
+|       `-- lib/                    Formatting and enum constants
+`-- docs/
+    |-- system-architecture.png
+    |-- database-design.png
+    |-- screenshots/                Six application screenshots
+    `-- capture-screenshots.mjs      Local screenshot automation
 ```
 
----
+## Prerequisites
 
-## Docker setup
+- For local development: Node.js and npm, PostgreSQL 16, and Git. Node 24 is the version used for the checks below. The locked frontend tools require Node `20.19+`, `22.13+`, or `24+` on their respective supported major lines; the backend alone declares `>=20`.
+- For the full container setup: Docker with the Compose plugin and a running engine. Host Node/PostgreSQL installations are unnecessary unless running host-side utility scripts or tests.
+- Available ports: `5173` for the frontend, `8000` for the API, and `5432` for PostgreSQL. Vite fails if `5173` is occupied.
+- For optional screenshot capture: Node 22.13+ or Node 24, Chrome/Edge, and the Docker-style `/api` proxy described in the technical reference.
 
-Install Docker with Compose and start Docker Desktop. If `backend/.env` does not exist, copy `backend/.env.example` to it and set two different JWT signing secrets. Keep an existing private `.env` file intact.
+## Environment variables
 
-From the repository root:
+Use [`backend/.env.example`](backend/.env.example) and [`frontend/.env.example`](frontend/.env.example). Commit the examples only. Real `.env` and `.env.local` files are ignored by Git. No real secrets are included in this documentation.
 
-```bash
-docker compose up --build
+### Backend: `backend/.env`
+
+| Variable | Example/default | Purpose |
+| --- | --- | --- |
+| `NODE_ENV` | `development` | `production` enables the Secure refresh cookie and suppresses error stacks in responses. |
+| `PORT` | `8000` | Local backend listening port. Compose fixes the internal port at `8000`. |
+| `CORS_ORIGIN` | `http://localhost:5173` | Allowed browser origin; comma-separate multiple origins. |
+| `DB_HOST` | `localhost` | Host-run backend database host; Compose overrides it to `postgres`. On Neon use the pooler host, for example `ep-xxxx-pooler.c-xx.aws.neon.tech`. Required. |
+| `DB_PORT` | `5432` | Database port. Set explicitly as in the template. |
+| `DB_NAME` | `tesla_pool` | Existing database name. On Neon this is usually `neondb`. Required. |
+| `DB_USER` | `postgres` | Database user. Required. |
+| `DB_PASSWORD` | `postgres` | Local demonstration password only; replace for deployment. Required. |
+| `DB_SSL` | `false` | Set `true` for Neon TLS with certificate verification. `render.yml` sets this for the hosted API. |
+| `JWT_ACCESS_SECRET` | `change-me-to-a-long-random-string` | Access-token signing key. Required; replace the placeholder. |
+| `JWT_REFRESH_SECRET` | `change-me-to-a-different-long-random-string` | Separate refresh-token signing key. Required; replace the placeholder. |
+| `ACCESS_TOKEN_EXPIRE` | `15m` | Access JWT lifetime; defaults to `15m` if omitted. |
+| `REFRESH_TOKEN_EXPIRE` | `7d` | Refresh JWT lifetime; defaults to `7d` if omitted. |
+
+Generate each signing key separately and paste the values into your uncommitted environment file:
+
+```sh
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-Open the frontend at `http://localhost:5173`; the API health endpoint is `http://localhost:8000/health`. Ports 5173, 8000, and 5432 must be available; stop a conflicting local service or change its Compose host-port mapping.
+The boot-time check validates the presence of required values, not their strength or whether the two signing keys differ. Cookie and token-record expiry durations contain fixed 7-day/15-minute values; changing JWT lifetimes alone does not update those durations.
 
-[Backend Dockerfile](backend/Dockerfile) and [frontend Dockerfile](frontend/Dockerfile) use Node 24. Compose runs PostgreSQL 16 with a persistent `postgres_data` volume. The backend runs migrations and location/road seeds before starting. Its container database settings override the hosted database fields in `backend/.env`, with `DB_HOST=postgres` and `DB_SSL=false`.
+### Frontend: `frontend/.env.local`
 
-[Nginx](frontend/nginx.conf) serves the frontend build, forwards `/api/*` to the backend, and supports refreshing normal frontend routes. Compose uses development cookie settings for local HTTP. This setup is separate from the Vercel/Render/Neon deployment.
+| Variable | Local value | Docker build value | Vercel value |
+| --- | --- | --- | --- |
+| `VITE_API_URL` | `http://localhost:8000` | `/api` | `https://dhaka-tesla-pool-backend-1n45.onrender.com` |
 
-Compose configuration validation passed after recovery. Container startup still needs verification with Docker running.
+Vite embeds this value in the browser bundle at build time. Never place secrets in `VITE_*` variables. The Dockerfile sets `/api` explicitly and does not copy `.env.local`; changing a runtime container variable will not change the built frontend. On Vercel the value is a dashboard environment variable, so it must be set before the build and a change requires a redeploy. See [deployment and hosting](#deployment-and-hosting).
 
----
+`DEMO_API_URL` optionally overrides the demo script's default `http://localhost:8000`, but the script accepts only localhost/loopback hosts. `CHROME_PATH` optionally selects the screenshot script's browser executable. Neither is required by the application.
 
 ## Local setup
 
-Prerequisites: Node.js 24 (matching deployment), npm, Git, and a reachable PostgreSQL database. Create the empty database first; migrations create tables, not the database.
+Run from a checked-out copy of this repository. The steps below use a locally installed PostgreSQL server.
 
-### Backend
+### 1. Create configuration files
 
-```bash
-cd backend
-cp .env.example .env        # Edit DB credentials
-npm ci
-npm run migrate             # Applies migrations
-npm run seed                # Seeds locations + roads
-npm run dev                 # :8000 with nodemon
+PowerShell, from the repository root (existing local files are preserved):
+
+```powershell
+if (!(Test-Path backend/.env)) { Copy-Item backend/.env.example backend/.env }
+if (!(Test-Path frontend/.env.local)) { Copy-Item frontend/.env.example frontend/.env.local }
 ```
 
-### Frontend
+Bash alternative:
 
 ```bash
-cd frontend
-cp .env.example .env.local
-npm ci
-npm run dev                 # http://localhost:5173
+test -f backend/.env || cp backend/.env.example backend/.env
+test -f frontend/.env.local || cp frontend/.env.example frontend/.env.local
 ```
 
 **Environment variables** (copy `.env.example` → `.env`):
@@ -131,515 +339,290 @@ npm run dev                 # http://localhost:5173
 
 > The two signing secrets **must be different**. They sign access/refresh tokens independently; a shared key would let a refresh token be replayed as an access token.
 
-Frontend: set `VITE_API_URL=http://localhost:8000` in `frontend/.env.local`. Vite exposes these variables publicly at build time. The backend reads `backend/.env`, not `backend/.env.local` automatically. It expects separate `DB_*` fields rather than `DATABASE_URL`. On Windows, use `Copy-Item` to copy examples and `npm.cmd` if PowerShell blocks npm.ps1.
-
 For Neon, add your database credentials to `backend/.env` and set `DB_SSL=true`.
-This verifies TLS certificates and enables channel binding when offered. Never commit `.env`.
+This verifies TLS certificates and enables channel binding when offered. Never commit `.env`. The same `DB_*` values are what the hosted API on Render reads, so a local `.env` pointed at Neon exercises the production database path.
 
 ---
 
-## Features
+### 2. Create the database
 
-### Passenger (Nusrat, Rafiq, Shirin)
+With PostgreSQL running, create the database if it does not already exist:
 
-- **Sign up / in** — `POST /auth/register`, `POST /auth/login`
-- **Request ride** — Pickup, Destination, Seats (`POST /rides`)
-- **See estimated fare** — `NULL` on REQUESTED; computed at match
-- **Track status** — Waiting → Matched → In Progress → Completed/Cancelled
-- **View history** — All rides with timeline (`GET /history/passenger`)
-- **Cancel when valid** — Only while REQUESTED or MATCHED (`PATCH /rides/:id/cancel`)
-
-### Driver (Jashim)
-
-- **Sign in**
-- **Go online/offline** — `PATCH /vehicle/status`
-- **Own Tesla with fixed capacity** — `POST /vehicle`, `GET /vehicle/me`
-- **See relevant requests** — Board shows detour, free seats, fit (`GET /matching/requests`)
-- **Accept ride/pool** — `POST /matching/:rideId/accept`
-- **Per-passenger arrival and boarding** -- `PATCH /trips/:poolId/rides/:rideId/arrive|start`
-- **Cancel one waiting passenger** -- `PATCH /trips/:poolId/rides/:rideId/cancel`; only before arrival for that passenger
-- **Complete pool** -- `PATCH /trips/:poolId/complete`; rejects remaining waiting passengers
-- **Cancel whole pool** -- `PATCH /trips/:poolId/cancel`; allowed only when no active passenger rides remain
-- **See passengers/seats** — Manifest with fares (`GET /pool/:poolId/passengers`)
-- **Ride history** — Completed trips with fares (`GET /history/driver`)
-
-### Pool / Ride
-
-- Multiple requests share one Tesla
-- Occupied seats never exceed capacity (enforced by `SELECT ... FOR UPDATE`)
-- Each passenger gets a fare based on their own distance; all sharing passengers receive the discount, including the first passenger.
-- Clear pool membership and lifecycle
-
-### Automatic routes and manual editing
-
-- When no active pool exists, drivers can choose a current location and destination, preview the route, then save it.
-- Accepting a ride replaces the displayed manual plan with the shared trip pickup and destination. Manual fields lock, and the backend rejects edits while the pool is active.
-- Every additional acceptance updates the pool route. My Tesla, Active Trip, and the acceptance summary show ordered stops and distance. Passengers see the latest shared route on Ride Details.
-- The displayed trip pickup is separate from the Tesla's actual location: accepting does not move the vehicle to the pickup. Completion updates the stored vehicle location to the final stop.
-- After completion or closing an empty pool, manual editing is available again. Cancelling only one passenger does not unlock a pool with other passengers. Empty active pools remain visible until the driver closes them.
-- Arrival and boarding are per passenger. Cancelling a waiting passenger frees only their seats, preserves other rides, and records history. Cancellation after arrival is rejected.
-
-### Loading and refresh behavior
-
-The shared Loading component provides page-specific messages, compact button indicators, and a longer-wait message after eight seconds. useApi reports a timeout after 60 seconds and prevents overlapping polling reloads from replacing pending requests. That timeout does not currently abort the underlying network request.
-
-The request board polls every 10 seconds. My Tesla, active trips, and active passenger ride details poll every 15 seconds while enabled and visible. Route/fare changes appear on the next refresh; this is not WebSocket push. Empty results show **No ride requests yet**, separately from errors.
-
-### Fare Model
-
-`passengerFare = baseFare + distanceCharge - poolDiscount`
-
-- Base fare: **50 BDT per ride request** (not per seat).
-- Distance charge: **round(passenger distance in km * 20 BDT)**.
-- Pool discount: **round(distanceCharge * 25%)** when at least two distinct passengers share a pool; otherwise zero.
-- Each passenger pays for their own shortest pickup-to-destination distance, not the driver's approach or other passengers' detours.
-- Adding a second, third, or fourth passenger updates every active ride's stored fare and breakdown in the same transaction as acceptance. The percentage stays 25%; discounts do not stack.
-- Once earned, a sharing discount is retained if another passenger cancels. Completed rides and settled payments are not repriced.
-
-**Hand-checkable example using the seeded road network:** Banani -> Gulshan is 3 km; Gulshan -> Mohakhali is 5 km. Use the seeded **Gulshan** location for Rafiq's Gulshan 1 stop.
-
-| Passenger | Own journey | Distance charge | Solo fare | Shared discount | Shared fare |
-|---|---|---:|---:|---:|---:|
-| Nusrat | Banani -> Gulshan -> Mohakhali (8 km) | 8 * 20 = 160 | 50 + 160 = 210 | 160 * 25% = 40 | **170 BDT** |
-| Rafiq | Banani -> Gulshan (3 km) | 3 * 20 = 60 | 50 + 60 = 110 | 60 * 25% = 15 | **95 BDT** |
-
-Accept Nusrat first: her fare is 210. Accept Rafiq into the same pool: Nusrat changes to 170 and Rafiq pays 95. Arrival order does not decide discount eligibility. Passenger Ride Details refresh automatically to show the updated breakdown.
-
-**Money storage:** PostgreSQL INTEGER columns store whole BDT/Taka for rides.fare and payments.amount; fare_breakdown stores the same integer components as JSON. This is not integer poysha or decimal currency. Whole-Taka rounding is an explicit simplification: integer totals avoid fractional rounding drift in stored balances, and every rounded line item adds up exactly. For fractional-Taka pricing, migrate all monetary values consistently to integer poysha (100 per Taka) or fixed-scale NUMERIC; do not mix units.
-
-**Payment:** Cash or simulated TeslaPay wallet (API value TESLA_WALLET). Both record the completed ride's stored fare; no real gateway or wallet transfer is performed.
-
-### Ride Lifecycle
-
-```text
-REQUESTED -> MATCHED -> DRIVER_ARRIVED -> ONGOING -> COMPLETED
-     |          |
-     +----------+----> CANCELLED
+```sh
+createdb -h localhost -p 5432 -U postgres tesla_pool
 ```
 
-Passengers cancel only REQUESTED/MATCHED rides. Drivers cancel an assigned passenger only before arrival. Arrival and boarding apply to individual rides; pool-wide completion rejects waiting passengers. A whole pool can be cancelled only when empty. Transactions record ride_history and prevent arrival and cancellation both succeeding for one ride.
+Use the user/database names from your environment file if different. If `createdb` is not on PATH, use PostgreSQL's command-line tools or create `tesla_pool` through your database client. Migrations create tables inside the database; they do not create the database itself.
 
----
+### 3. Install and run the backend
 
-## Screenshots
+In terminal 1, from the repository root:
 
-These are the original project screenshots restored from Git. They document an earlier UI version: the route-change control, trip actions, and displayed pooled fares may differ from the current implementation described above.
-
-<details>
-<summary>Driver: vehicle availability and route planning</summary>
-
-![Driver vehicle and saved route](docs/screenshots/02-driver-route.png)
-
-</details>
-
-<details>
-<summary>Passenger: request a ride</summary>
-
-![Passenger selects pickup, destination, and seats](docs/screenshots/03-request-ride.png)
-
-</details>
-
-<details>
-<summary>Driver: earlier route-change preview</summary>
-
-![Earlier change-route-and-accept interface](docs/screenshots/04-change-route.png)
-
-</details>
-
-<details>
-<summary>Driver: shared route and passenger manifest</summary>
-
-![Active pool with passenger manifest and trip controls](docs/screenshots/05-active-trip.png)
-
-</details>
-
-<details>
-<summary>Passenger: ride status, fare, route, and timeline</summary>
-
-![Passenger ride details from the earlier demo](docs/screenshots/06-passenger-trip.png)
-
-</details>
-
-The restored [capture script](docs/capture-screenshots.mjs) targets the earlier UI and needs updated selectors before reuse. It creates demo data and advances trip states; use only with a disposable local database.
-
-## Architecture
-
-```
-Browser (React + Vite)  →  Node.js API (Express)  →  PostgreSQL
+```sh
+cd backend
+npm ci
+npm run migrate
+npm run seed
+npm run dev
 ```
 
-### Architecture Diagram
+The API is available at [localhost:8000](http://localhost:8000). [GET /health](http://localhost:8000/health) performs a real database query. Use `npm start` instead of `npm run dev` to run without Nodemon; neither command automatically migrates or seeds outside Docker.
 
-![System architecture showing React, Nginx, Express services, and PostgreSQL](docs/system-architecture.png)
+### 4. Install and run the frontend
 
-The original image describes the local Docker setup. The diagram below shows the hosted Vercel/Render/Neon setup.
+In terminal 2, from the repository root:
 
-```mermaid
-flowchart LR
-  Browser["Passenger / Driver browser<br/>Runs the React application"]
-
-  subgraph FrontendHost["Frontend hosting: Vercel"]
-    Frontend["React + Vite static build<br/>dhaka-tesla-pool-umber.vercel.app"]
-  end
-
-  subgraph BackendHost["Backend hosting: Render"]
-    API["Node.js + Express API<br/>dhaka-tesla-pool-backend-1n45.onrender.com<br/>Authentication, matching, pools and fares"]
-  end
-
-  subgraph DatabaseHost["Database hosting: Neon"]
-    DB[("PostgreSQL<br/>Users, vehicles, rides, pools and payments")]
-  end
-
-  Browser -->|Load application over HTTPS| Frontend
-  Browser -->|HTTPS JSON API requests and authentication| API
-  API -->|SQL via pg over verified TLS| DB
+```sh
+cd frontend
+npm ci
+npm run dev
 ```
 
-Vercel serves the frontend files; the application running in the browser calls the Render API directly. Render connects to the private Neon database. These are the configured hosting targets; verify the deployed version before recording the walkthrough.
+Open [localhost:5173](http://localhost:5173). On Windows, use `npm.cmd` if PowerShell blocks the `npm.ps1` launcher.
 
-### Database diagram
+For a local production-build check, run `npm run build`, then `npm run preview -- --port 5173` from `frontend/` after stopping Vite. Reusing port `5173` keeps the default backend CORS origin valid. Vite preview does not provide the Docker Nginx `/api` proxy, so use the direct backend URL for this build.
 
-![Database design showing users, vehicles, rides, pools, fares, payments, and authentication](docs/database-design.png)
+## Docker setup
 
-The original database-design image shows the application tables and their fields. The Mermaid diagram below summarizes their relationships.
+Create `backend/.env` from its example as above and set the JWT keys. Then, from the repository root:
 
-```mermaid
-erDiagram
-  users ||--o{ vehicles : owns
-  users ||--o{ rides : requests
-  users ||--o{ pools : drives
-  users ||--o{ driver_routes : plans
-  users ||--o{ refresh_tokens : holds
-  vehicles ||--o{ pools : serves
-  pools ||--o{ pool_rides : contains
-  rides ||--o{ pool_rides : assigned
-  rides ||--o{ ride_history : records
-  rides ||--o{ payments : settles
-  users ||--o{ ride_history : acts
-  users ||--o{ payments : pays
-  locations ||--o{ vehicles : current_location
-  locations ||--o{ rides : pickup_or_destination
-  locations ||--o{ road_edges : connects
-  locations ||--o{ driver_routes : start_or_destination
+```sh
+docker compose up --build -d
+docker compose ps
+docker compose logs --tail=100 backend
 ```
 
-The ERD shows database relationships, not an assertion of one successful payment enforced by a unique constraint. Additional tables include token_blacklist and schema_migrations. Pool routes and fare breakdowns use JSONB.
+| Service | Local access | Container behavior |
+| --- | --- | --- |
+| Frontend | [http://localhost:5173](http://localhost:5173) | Nginx serves the Vite build on port 80. |
+| API via frontend | [http://localhost:5173/api/health](http://localhost:5173/api/health) | Nginx strips `/api` and forwards to Express. |
+| API directly | [http://localhost:8000/health](http://localhost:8000/health) | Express listens on container port 8000. |
+| Database | `localhost:5432` | PostgreSQL 16 with the named `postgres_data` volume. |
 
-The original diagrams are stored at [docs/system-architecture.png](docs/system-architecture.png) and [docs/database-design.png](docs/database-design.png).
+PostgreSQL must pass its health check before the backend starts. The backend startup command runs pending migrations, seeds the reference graph, then starts Express. The frontend waits for the backend health check. Source code is copied into images, so code changes require rebuilding.
 
-### Tech stack
+**Compose environment distinction:** `env_file: ./backend/.env` supplies backend auth/CORS values, but Compose explicitly overrides database values with `${DB_*}` substitutions and defaults. Plain `docker compose up` therefore uses the default database name/user/password unless those variables are supplied to Compose through the shell or a root `.env`. To use the database values from `backend/.env` for interpolation too, use:
 
-React 19, React Router 7, Vite 8, Tailwind CSS 4, Node.js 24, Express 5, PostgreSQL (pg), Zod, bcrypt, and JWT.
-
-### Backend Structure
-
-```
-backend/src/
-├── app.js                 # Express app, middleware, route mounting
-├── server.js              # Boots app, checks DB first
-├── config/env.js          # Env config, fails fast when incomplete
-├── database/
-│   ├── db.js              # Pooled pg client
-│   ├── migrate.js         # Migration runner (tracks applied files)
-│   ├── migrations/up|down # Numbered SQL, applied in order
-│   └── seeds/             # Locations + roads (no accounts)
-├── middleware/            # auth, role, validate, asyncHandler, errors
-├── modules/               # One folder per feature
-│   ├── auth/              # register, login, refresh, logout
-│   ├── users/             # profile
-│   ├── vehicles/          # Tesla registration and status
-│   ├── location/          # Dhaka locations
-│   ├── graph/             # road graph, Dijkstra
-│   ├── rides/             # requests, cancellation, state machine
-│   ├── matching/          # ranking, accept flow, seat claiming
-│   ├── pools/             # route optimiser, pooling, manifest
-│   ├── trips/             # arrive, start, complete
-│   ├── routes/            # driver route planning
-│   ├── history/           # passenger and driver history
-│   ├── payment/           # settlement
-│   └── fare/              # fare model
-└── utils/                 # AppError, response helpers
+```sh
+docker compose --env-file backend/.env up --build -d
 ```
 
-Each module keeps its own `*.service.js`, `*.repository.js`, `*.routes.js`, `*.validation.js`. Controllers handle HTTP, services hold rules, repositories own SQL.
+Use the same `--env-file backend/.env` option consistently for subsequent Compose commands when choosing this form. Compose still uses `DB_HOST=postgres` internally. An existing database volume retains its original PostgreSQL user/password; changing environment variables does not reset that database.
 
-### Frontend Structure
+Useful commands:
 
-```
-frontend/src/
-├── api/client.js          # Single fetch() call site; auth, refresh, envelope
-├── components/
-│   ├── ui/                # Reusable primitives including Loading (Button, Input, Select…)
-│   ├── layout/            # AppShell, Navbar, PageContainer
-│   ├── driver/            # RequestCard, PassengerManifest
-│   └── ride/              # FareBreakdown, RoutePath, RoutePreview
-├── context/AuthProvider.jsx
-├── hooks/useApi.js, useAuth.js
-├── lib/format.js, constants.js
-├── pages/
-│   ├── auth/              # LoginPage, RegisterPage
-│   ├── passenger/         # RequestRide, MyRides, RideDetail, JoinPool, Payments, History
-│   └── driver/            # MyTesla, Requests, ActiveTrip, History
-├── routes/                # AppRoutes, ProtectedRoute, RoleRoute
-└── services/              # One file per backend module (URL building only)
+```sh
+docker compose logs --tail=100 frontend backend postgres
+docker compose exec backend npm run migrate
+docker compose exec backend npm run seed
+docker compose down
 ```
 
----
+`docker compose down` retains the database volume. Adding `--volumes` deletes the stored database and should be used only for an intentional disposable-data reset.
 
-## API Reference
+## Migrations and seeds
 
-Base URL: `http://localhost:8000`  
-Response envelope: `{ "success": boolean, "message": string, "data": ... }`  
-Auth: `Authorization: Bearer <accessToken>` (access tokens 15 min; refresh token httpOnly cookie, 7 days)
+Run these commands from `backend/` for local development:
 
-### Auth
+| Command | Effect |
+| --- | --- |
+| `npm run migrate` | Applies unapplied `src/database/migrations/up/*.sql` files in filename order, in individual transactions. |
+| `npm run migrate:down` | Rolls back one most recently applied migration using its matching down file. This can drop a table and its data. |
+| `npm run seed` | Inserts reference locations and road edges; creates no users, vehicles, bookings, or payments. |
+| `npm run demo:accounts` | Registers the three local demo accounts through the running API. |
 
-| Method | Path | Access | Purpose |
-|--------|------|--------|---------|
-| POST | `/auth/register` | public | Create account |
-| POST | `/auth/login` | public | Sign in, sets refresh cookie |
-| POST | `/auth/refresh-token` | cookie | Mint new access token |
-| POST | `/auth/logout` | authenticated | Revoke current token |
+`schema_migrations` records filenames, so rerunning migration-up skips applied files. Editing an already-applied file will not update an existing database; add a new migration for schema changes. The numbering gap at `007` is harmless because the runner discovers files rather than requiring consecutive numbers.
 
-### Users
+The seed contains **8 locations** (Banani, Gulshan, Mohakhali, Dhanmondi, Mirpur, Uttara, Farmgate, Bashundhara) and **10 road-edge rows**. Each edge is traversable in both directions in the in-memory graph. Distances are demonstration weights, not measured traffic-aware distances. Sequential reruns skip existing records; there is no database uniqueness constraint protecting road edges against concurrent seed runs.
 
-| Method | Path | Access | Purpose |
-|--------|------|--------|---------|
-| GET | `/users/me` | authenticated | Own profile |
-| PATCH | `/users/me` | authenticated | Update own profile |
+## Demo credentials and walkthrough
 
-### Vehicles (Driver)
+These are deliberately public, local-only accounts defined in [`create-demo-accounts.js`](backend/scripts/create-demo-accounts.js), not production credentials. They exist only after running the script or registering them manually. With the API running on port `8000`, run from the repository root:
 
-| Method | Path | Access | Purpose |
-|--------|------|--------|---------|
-| POST | `/vehicle` | DRIVER | Register Tesla |
-| GET | `/vehicle/me` | DRIVER | Own Tesla |
-| PATCH | `/vehicle/status` | DRIVER | Go online/offline |
-| PATCH | `/vehicle/:id` | DRIVER | Update Tesla (own only) |
-
-### Rides (Passenger)
-
-| Method | Path | Access | Purpose |
-|--------|------|--------|---------|
-| POST | `/rides` | PASSENGER | Request a ride |
-| GET | `/rides/my` | PASSENGER | Own rides, including shared_route, pool_id, route_updated_at |
-| GET | `/rides/:id/history` | owner or driver | Full lifecycle trail |
-| PATCH | `/rides/:id/cancel` | PASSENGER (owner) | Cancel before driver arrival |
-
-### Matching (Driver)
-
-| Method | Path | Access | Purpose |
-|--------|------|--------|---------|
-| GET | `/matching/requests` | DRIVER | Open requests with detour/fit |
-| POST | `/matching/:rideId/accept` | DRIVER | Accept with own Tesla |
-| POST | `/matching/:rideId` | DRIVER | Auto-match, best Tesla wins |
-
-### Pools
-
-| Method | Path | Access | Purpose |
-|--------|------|--------|---------|
-| POST | `/pool/:poolId/add-passenger` | PASSENGER (own ride) | Join existing Tesla |
-| GET | `/pool/:poolId/passengers` | DRIVER (own pool) | Passenger manifest |
-
-### Trips (Driver)
-
-| Method | Path | Access | Purpose |
-|--------|------|--------|---------|
-| GET | `/trips/my-active` | DRIVER | Current trip |
-| PATCH | `/trips/:poolId/rides/:rideId/arrive` | DRIVER (own pool) | Arrive for one passenger |
-| PATCH | `/trips/:poolId/rides/:rideId/start` | DRIVER (own pool) | Board one passenger |
-| PATCH | `/trips/:poolId/rides/:rideId/cancel` | DRIVER (own pool) | Cancel one passenger before arrival |
-| PATCH | `/trips/:poolId/cancel` | DRIVER (own pool) | Close an empty pool |
-| PATCH | `/trips/:poolId/complete` | DRIVER (own pool) | Finish |
-
-Legacy pool-wide arrive/start endpoints return 409: use individual passenger actions.
-
-### Driver route planning
-
-| Method | Path | Access | Purpose |
-|---|---|---|---|
-| POST | /driver-routes/preview | DRIVER | Calculate without saving |
-| POST | /driver-routes | DRIVER | Save currentLocationId and destinationLocationId; current location optional |
-| GET | /driver-routes/me | DRIVER | Active shared route or applicable manual plan; includes locked |
-
-### History, Payments, Locations
-
-| Method | Path | Access | Purpose |
-|--------|------|--------|---------|
-| GET | `/history/passenger` | PASSENGER | Ride history |
-| GET | `/history/driver` | DRIVER | Trip history |
-| POST | `/payments/:rideId` | PASSENGER (own ride) | Pay for completed ride |
-| GET | `/payments/my` | PASSENGER | Payment history |
-| GET | `/location` | public | All locations |
-| GET | `/location/:id` | public | One location |
-| GET | `/health` | public | Liveness + DB round-trip |
-
-> Drivers poll `/matching/requests` and `/trips/my-active`. No WebSocket/push.
-
----
-
-## Matching & Routing
-
-Eight seeded zones: Banani, Gulshan, Mohakhali, Dhanmondi, Mirpur, Uttara, Farmgate, Bashundhara. Dijkstra calculates shortest paths.
-
-- First acceptance: any reachable passenger route is allowed for an online Tesla with capacity; the driver's saved destination does not restrict it.
-- Later acceptances: compare the proposed pool route with the current route. Extra distance must be at most 5 km, with sufficient seats.
-- The board prioritizes takeable requests, then shorter detours and older requests. Sharing a pickup does not automatically guarantee compatibility.
-- Each board calculation loads the road graph once and reuses it. A controlled ten-request example dropped road-data reads from 310 to 1 with identical results; this is not a live latency guarantee.
-- The route display is an ordered sequence of stops, not live GPS navigation.
-
----
-
-## Capacity enforcement
-
-Driver acceptance locks the Tesla row before checking or creating its active pool, then rechecks allocated seats in the transaction. Direct passenger joins lock the existing pool before checking seats. Requests that exceed remaining capacity are rejected with a conflict response. The first pool requires a vehicle lock because its pool row does not exist yet.
-
-These protections do not replace regression testing of all competing API paths; see the limitations below.
-
----
-
-## Authentication
-
-- **Access token** — JWT, 15 min, stored in **memory only** (never localStorage)
-- **Refresh token** — httpOnly cookie, 7 days, `SameSite=None; Secure` in production, `SameSite=Lax` in development
-- **Auto-refresh** — On 401, client calls `/auth/refresh-token` once, retries original request
-- **Logout** — Clears memory + revokes refresh token + blacklists access token until expiry
-
-> No localStorage for access tokens. On page refresh, a fresh access token is acquired via the httpOnly refresh cookie.
-
----
-
-## Database Schema (Key Tables)
-
-| Table | Purpose |
-|-------|---------|
-| `users` | id, name, email, password_hash, role |
-| `vehicles` | id, driver_id, model, capacity, current_location_id, status |
-| `rides` | id, passenger_id, pickup/destination_location_id, seats, status, fare, fare_breakdown, timestamps |
-| `pools` | id, vehicle_id, driver_id, status, capacity, current_route (JSONB) |
-| `pool_rides` | pool_id, ride_id, seats_allocated |
-| `payments` | id, ride_id, passenger_id, amount, method, status |
-| `ride_history` | ride_id, actor_id, action, created_at |
-| `locations` | id, name (8 Dhaka zones) |
-| `road_edges` | from_location_id, to_location_id, distance_km |
-
----
-
-## Git Workflow
-
-The hosting workflow uses `pre-release`. Commit application changes and lockfiles, push the intended branch, then check that Render and Vercel deployed that commit successfully. Never commit private .env files or credentials.
-
----
-
-## Testing & Concurrency
-
-From frontend:
-
-```bash
-npm run build
-npm run lint
+```sh
+node backend/scripts/create-demo-accounts.js
 ```
 
-Neither package defines an npm test script. Development used one-off checks against temporary local database schemas that were removed afterward. Checks covered route preview/save, four sequential acceptances and shared-route visibility, per-passenger cancellation and seat release, ownership, arrival/cancellation races, empty-pool closure, location locking, completion updates, and first-passenger fare repricing through both acceptance paths. These are not a committed regression suite or proof that the current hosted commit contains every change.
+Or run `npm run demo:accounts` from `backend/`. Existing accounts remain unchanged, including their passwords.
 
-Manual demo:
-1. Register Jashim, Nusrat, and Rafiq; create Bullet with four seats and put it online.
-2. Preview and save a manual route.
-3. Accept Nusrat's Banani-to-Mohakhali ride: fare 210, route fields locked.
-4. Accept Rafiq's Banani-to-Gulshan ride: Nusrat becomes 170, Rafiq 95; both see the current shared route after polling.
-5. Mark Nusrat arrived/onboard. Her cancellation must fail; Rafiq can still be cancelled individually without changing Nusrat's status.
-6. Complete the remaining trip, check the vehicle's final location, and record a Cash or simulated TeslaPay payment.
-7. In a separate trip cancel the last waiting passenger, close the empty pool, and edit the next route.
-8. Open and refresh a normal frontend URL directly; verify loading, empty, and error states.
+| Role | Name | Email | Password |
+| --- | --- | --- | --- |
+| Driver | Demo Driver | `driver@example.test` | `DemoRide2026!` |
+| Passenger | Passenger One | `passenger1@example.test` | `DemoRide2026!` |
+| Passenger | Passenger Two | `passenger2@example.test` | `DemoRide2026!` |
 
----
+The `example.test` domain is reserved for documentation and cannot receive mail, so these accounts cannot be targeted by a real message. To use different credentials, edit `DEMO_ACCOUNTS` in the script and re-run it.
 
-## Deployment
+For a Docker-only machine without host Node, the image does not include `scripts/`. Copy and run the standalone registration script in the running backend container:
 
-### Hosted URLs
-
-| Component | Platform | Address |
-|---|---|---|
-| Frontend | Vercel | [Open app](https://dhaka-tesla-pool-umber.vercel.app) |
-| Backend | Render | [API](https://dhaka-tesla-pool-backend-1n45.onrender.com) |
-| Health | Render + DB check | [Health](https://dhaka-tesla-pool-backend-1n45.onrender.com/health) |
-| Public data | Render | [Locations](https://dhaka-tesla-pool-backend-1n45.onrender.com/location) |
-| Database | Neon PostgreSQL | Private credentials configured on Render |
-
-This README describes the repository, not a guarantee of which commit is currently live.
-
-### Render
-
-[render.yml](render.yml) defines root directory backend, Node 24, build command npm ci, start command npm start, and health path /health. Connect pre-release and configure private DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, JWT_ACCESS_SECRET and JWT_REFRESH_SECRET in Render.
-
-```env
-NODE_ENV=production
-DB_PORT=5432
-DB_SSL=true
-CORS_ORIGIN=https://dhaka-tesla-pool-umber.vercel.app
+```sh
+docker compose cp backend/scripts/create-demo-accounts.js backend:/tmp/create-demo-accounts.js
+docker compose exec backend node /tmp/create-demo-accounts.js
 ```
 
-Render supplies PORT. A local .env edit does not update hosted settings. Neon TLS certificate verification stays enabled. Do not publish the database connection string.
+Use separate browser profiles or a normal/private window for the driver and passenger; tabs in the same profile share the refresh cookie. Sign out between the two passenger accounts if using one passenger window.
 
-### Vercel
+1. Sign in as the driver. In **My Tesla**, register a vehicle such as `Bullet`, capacity `4`, current location **Banani**, and go online.
+2. Plan **Banani -> Gulshan**. The seeded graph gives a 3 km route.
+3. Sign in as Passenger One and request **Banani -> Mohakhali**, one seat.
+4. As the driver, open **Ride requests** and select **Refresh**. The request exceeds the original route's 2 km detour limit. Choose **Change route and accept** to explicitly replace the unused plan with **Banani -> Gulshan -> Mohakhali**, 8 km.
+5. As Passenger Two, request **Gulshan -> Mohakhali**, one seat. The driver can accept it into the same pool. Alternatively, Passenger Two can use **Join a pool** with the pool number shown in the driver's active trip.
+6. Refresh both trip screens. The driver sees two occupied seats and two remaining. Passenger One's 8 km first-passenger fare is **210 BDT**; Passenger Two's 5 km pooled fare is **125 BDT**. The first fare is not retrospectively discounted.
+7. As the driver, select **Mark as arrived**, then start and complete the trip in order. Refresh the passenger screen after each change.
+8. As each passenger, record a payment for the completed ride using `CASH` or `TESLA_WALLET`. Review payments and history; the driver can review the completed trip and plan another route.
+
+For a separate cancellation demonstration, cancel a waiting or matched ride before driver arrival. See the cancellation limitations below before cancelling every passenger in an active pool.
+
+## Deployment and hosting
+
+The three tiers are hosted separately, each on a different service:
+
+| Tier | Service | Configuration in this repository |
+| --- | --- | --- |
+| Frontend (React SPA) | **Vercel** | [`frontend/vercel.json`](frontend/vercel.json) — static build with the SPA fallback rewrite. |
+| Backend API (Express) | **Render** | [`render.yml`](render.yml) at the repository root — a single Node web service. |
+| Database (PostgreSQL) | **Neon** | No config file; credentials are entered as Render environment variables. See [`backend/.env.example`](backend/.env.example). |
+
+### Addresses
+
+| Scope | Entry | URL |
+| --- | --- | --- |
+| Hosted | Frontend | `https://dhaka-tesla-pool-umber.vercel.app` |
+| Hosted | API | `https://dhaka-tesla-pool-backend-1n45.onrender.com` |
+| Hosted | API health | `https://dhaka-tesla-pool-backend-1n45.onrender.com/health` |
+| Local | Frontend | [http://localhost:5173](http://localhost:5173) |
+| Local | API | [http://localhost:8000](http://localhost:8000) |
+| Local | API health | [http://localhost:8000/health](http://localhost:8000/health) |
+
+> The live Render hostname carries the `-1n45` suffix. `render.yml` requests `dhaka-tesla-pool-backend`, but that name was already taken on Render, so the platform suffixed the real service. The bare `dhaka-tesla-pool-backend.onrender.com` therefore resolves to an **unrelated** service and must not be used — the correct API hostname is the suffixed one, which is also what the Vercel bundle has baked in as `VITE_API_URL`.
+
+### Backend on Render
+
+[`render.yml`](render.yml) is a Render Blueprint at the repository root. Render reads it when the repo is connected with **Infrastructure as Code / Blueprint** enabled, or from **Settings → Blueprints** on an existing service.
 
 | Setting | Value |
-|---|---|
-| Production branch used | pre-release |
-| Root directory | frontend |
-| Framework | Vite |
-| Node version | 24 |
-| Install command | npm ci |
-| Build command | npm run build |
-| Output directory | dist |
+| --- | --- |
+| Type / plan | `web`, `free` |
+| Requested name | `dhaka-tesla-pool-backend` |
+| Live name | `dhaka-tesla-pool-backend-1n45` — Render suffixes the requested name when it is already taken |
+| Root directory | `backend` |
+| Build command | `npm ci` |
+| Start command | `npm start` (runs `node src/server.js`) |
+| Health check path | `/health` |
+| `NODE_VERSION` | `24` (matches `backend/Dockerfile`) |
+| `NODE_ENV` | `production` |
+| `DB_SSL` | `true` |
+| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | `generateValue: true` — Render creates a random value per service |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `CORS_ORIGIN` | `sync: false` — set these by hand in the Render dashboard |
 
-Set the Production environment variable, then redeploy:
+Render injects `PORT` automatically, and the API already reads it, so no port is hardcoded in `render.yml`. Because the live name is suffixed, read the real hostname from the Render dashboard rather than deriving it from `render.yml`.
 
-```env
-VITE_API_URL=https://dhaka-tesla-pool-backend-1n45.onrender.com
+**Migrations are not automatic on Render.** Unlike `backend/Dockerfile`, which chains migrate → seed → start, the Render start command only runs `node src/server.js`, and `src/server.js` performs a connection check rather than applying migrations. On a fresh Neon database, run these once from the Render dashboard's **Shell** tab:
+
+```sh
+npm run migrate
+npm run seed
 ```
 
-Use the backend root without /api or a trailing slash. Vite embeds this value at build time. [frontend/vercel.json](frontend/vercel.json) rewrites frontend routes to /index.html, supporting normal URLs such as /login and /my-rides/1. This fallback is not an API proxy. Unknown routes show the React not-found page.
+The seed is repeatable reference data, so re-running it is safe. Render's free plan also idles the service and cold-starts on the next request; `/health` performs a real database query, so it reports `database: up` only when Neon is reachable.
 
-A Vercel preview URL is a different origin. Requests from it need that exact origin in Render's comma-separated CORS_ORIGIN; use the main domain for the public demo. Do not use a wildcard for credentialed requests.
+### Database on Neon
 
-### Migrations and release verification
+`backend/src/config/env.js` reads the Neon connection settings from the standard `DB_*` variables, and `DB_SSL=true` selects `ssl: { rejectUnauthorized: true }` with channel binding in `src/database/db.js`.
 
-For a new database, run npm run migrate and npm run seed from backend using the intended database credentials. These are separate from Render's build/start commands. Seeds create reference locations/roads, not users. npm run migrate:down rolls back the latest migration and can remove data; use only against an intended development database. Recent route, cancellation, and fare changes need no new migration. Do not restore the database just to deploy code.
+| Variable | Development (`backend/.env`) | Notes |
+| --- | --- | --- |
+| `DB_HOST` | `*.pooler.c-*.aws.neon.tech` | Use the **pooler** host, not the direct host. |
+| `DB_PORT` | `5432` | |
+| `DB_NAME` | `neondb` | Must already exist; migrations create tables, not the database. |
+| `DB_USER` | `neondb_owner` | |
+| `DB_PASSWORD` | Neon-generated | Never commit it. |
+| `DB_SSL` | `true` | Required for Neon's TLS endpoint. |
 
-After pushing, verify both hosts deployed the intended commit. Check /health, a direct frontend page refresh, login, and one passenger/driver flow.
+The real password is committed nowhere: `backend/.env` is gitignored, and the Render dashboard holds the copy used in production. If that value has ever been pasted into a chat, log, or commit, rotate the Neon role password and update the Render environment variable.
 
-### Troubleshooting
+### Frontend on Vercel
 
-- Frontend route 404: check root directory frontend and that the deployed commit includes vercel.json.
-- Cannot fetch data: inspect the failing browser Network request, actual frontend origin, API URL, CORS headers, and backend health.
-- Refresh token missing before login: expected when there is no saved session; inspect the login request separately.
-- Session lost after refresh: check production cookie settings and browser third-party-cookie restrictions. A same-origin API proxy or shared-site domains would avoid that cross-site limitation.
-- npm ci failure: synchronize and commit package.json and package-lock.json.
-- Empty requests: show No ride requests yet; an empty list is not a loading failure.
+Import the repository into Vercel with the **frontend** directory as the project root. Vercel detects Vite and runs `npm run build`, publishing `dist/`. Two settings matter:
 
----
+1. **Environment variable** — set `VITE_API_URL` to the full Render API origin, `https://dhaka-tesla-pool-backend-1n45.onrender.com`. Do **not** use `/api` here. Vite inlines the value at build time, so the variable must be set before the build runs; changing it in the dashboard requires a redeploy. It is a public `VITE_` value and contains no secret.
+2. **SPA routing** — [`frontend/vercel.json`](frontend/vercel.json) rewrites every path to `/index.html` so that React Router deep links work on a hard refresh.
 
-## Trade-offs & Limitations
+Because the catch-all rewrite sends unmatched paths to `index.html`, Vercel provides **no `/api` proxy**. The `/api` prefix is only meaningful in the Docker/Nginx setup, where Nginx strips it before forwarding to `backend:8000`. In the hosted setup, frontend and API are on different domains, so every request carries the absolute `VITE_API_URL`.
 
-- Seeded zones and stop sequences keep routing explainable; there is no live GPS, traffic, weather pricing, or map navigation.
-- Polling is simple but updates take up to the next 10-15 second refresh. WebSockets or server-sent events are future options.
-- Whole-Taka fares and retained earned discounts are deliberate demo policies; fractional pricing requires a money-unit migration.
-- Payments simulate settlement, not actual transfers. Add a database uniqueness constraint for one successful payment per ride before relying on concurrent payments.
-- Locks protect seat claims and trip actions, but do not imply every API path is concurrency-safe. Add durable regression coverage for duplicate acceptance, passenger cancellation races, simultaneous route changes and joins, and payments.
-- UI request timeouts do not abort server work; add cancellation and server-side time limits.
-- Refresh tokens are stored as text; rotation and expiry cleanup are absent. Rate limiting, password reset, email verification, signing-key-strength checks, and consistent configurable expiry metadata remain improvements.
-- Refresh the restored screenshots for the current UI, add reproducible integration tests and deployment smoke checks, and verify the restored Docker setup end to end.
+### Cross-origin requirements
 
----
+Frontend on Vercel and API on Render are different origins, so both sides need configuring:
+
+- Set Render's `CORS_ORIGIN` to the Vercel production origin, in this deployment `https://dhaka-tesla-pool-umber.vercel.app`. `src/config/env.js` splits the value on commas, so several origins can be listed, for example `https://dhaka-tesla-pool-umber.vercel.app,http://localhost:5173` for local frontend work against the hosted API. Vercel preview deployments get a different domain per branch, so each one must be added explicitly.
+- In production the refresh cookie is issued as `Secure` and `SameSite=None` (`src/modules/auth/auth.controller.js`), which is what allows the cross-site cookie to travel. Both sites are served over HTTPS by their platforms, so this works, but a plain-HTTP origin will not receive the cookie and sessions will not survive a token refresh.
+- A single origin with `/api` forwarding is the simpler alternative. Keeping the API behind the same host as the frontend avoids CORS and cross-site cookies entirely, at the cost of a reverse proxy in front of the API.
+
+### Notes and limits
+
+The repository still contains the full local setup: [`docker-compose.yml`](docker-compose.yml) runs PostgreSQL, the API, and the Nginx-served frontend on one machine. The three hosting services are configured by the files above; there is no CI workflow that builds, migrates, or deploys them, and no infrastructure-as-code beyond `render.yml`. TLS termination, process restarts, and free-tier quotas are handled by Vercel, Render, and Neon rather than by this project.
+
+## API overview
+
+Direct local API base: `http://localhost:8000`. Through Docker Nginx: `http://localhost:5173/api`. When hosted, the base is the absolute `VITE_API_URL` built into the Vercel bundle, `https://dhaka-tesla-pool-backend-1n45.onrender.com`.
+
+Protected requests use `Authorization: Bearer <access-token>`. Login sets the HttpOnly `refreshToken` cookie; browser calls include credentials. Successful resource responses normally use `{ "success": true, "message": "...", "data": ... }`; errors use `{ "success": false, "message": "..." }`. The root and health endpoints have their own response shapes.
+
+| Module | Main operations |
+| --- | --- |
+| `/auth` | Register, login, refresh access token, logout |
+| `/users/me` | Read and update the signed-in user's profile |
+| `/location` | Public location list and detail |
+| `/vehicle` | Driver vehicle creation, editing, and availability |
+| `/driver-routes` | Save and retrieve the driver's route |
+| `/rides` | Passenger requests, own rides, cancellation, authorized event timeline |
+| `/matching` | Driver request board, specific acceptance, automatic matching |
+| `/pool` | Passenger joins by pool number; owning driver reads manifest |
+| `/trips` | Driver active-trip view and arrival/start/completion actions |
+| `/history` | Passenger ride history and driver completed-trip history |
+| `/payments` | Passenger payment recording and payment history |
+
+See the routing and matching notes above for request shapes. Paths such as `/api/rides` apply only through Nginx; Express itself exposes `/rides`.
+
+## Key decisions and trade-offs
+
+| Decision | Benefit | Trade-off |
+| --- | --- | --- |
+| Small seeded graph and Dijkstra | Routes are deterministic and can be explained and tested without an external API. | Demonstration distances exclude traffic, one-way roads, GPS, and real ETAs. |
+| Stop insertion with a 2 km incremental limit | Preserves existing stop order and a saved driver destination while allowing sharing. | Optimizes a new insertion, not the globally best ordering of every passenger; cumulative detours can exceed 2 km. |
+| Modular Express service/repository layout | Business rules and SQL remain easy to locate in one deployable API. | Transaction boundaries and repeated queries must be managed explicitly. |
+| PostgreSQL transactions and row locks | Matching rechecks seats and rebuilds the route against the locked pool. | Locks cover a vehicle/pool, but additional cross-vehicle ride-claim guarantees are still needed. |
+| JSONB route/fare snapshots | Reads can return the accepted route and fare breakdown directly. | JSON structure is maintained by application code and must be kept consistent with relational changes. |
+| Whole-BDT fare model | Totals can be verified by hand. | No fractional-currency accounting; seats requested do not multiply the fare. |
+| In-memory access token plus HttpOnly refresh cookie | The browser client can restore sessions without persisting access tokens in localStorage. | Cookie lifetime, origin policy, revocation storage, and refresh failures need explicit handling. |
+| Manual Refresh and a small React stack | Simple client state and no persistent connection service. | Updates from another user's session are not pushed automatically. |
+| Migrate/seed at container startup | A fresh local demo starts with the expected schema and locations. | Multiple production replicas need coordinated migrations rather than simultaneous startup changes. |
+
+## Known limitations
+
+- **Demo scope:** only eight predefined locations; no address search, live GPS, traffic-aware routing, per-stop navigation, real payment processing, wallet balance, driver verification, or admin console.
+- **Trip granularity:** arrival/start/completion act on eligible rides in a pool together. The model does not track each vehicle's progress through individual pickup/drop-off stops. An `ACTIVE` pool can still receive requests after some rides have started.
+- **Fare policy:** the first passenger pays the solo fare; later joiners receive a discount on their distance charge only. Existing fares are not repriced, and a request for several seats still receives one distance-based fare. Matching writes the fare after the assignment transaction, leaving a consistency gap if that final write fails.
+- **Concurrency/integrity:** there is no unique ride-only pool membership constraint or atomic cross-vehicle claim. Payment deduplication is a check followed by an insert, without a unique ride constraint. Matching uses the pool's capacity snapshot, while direct pool joining checks the live vehicle capacity. These paths need stronger shared invariants before production use.
+- **Cancellation:** seats are removed, but the pool route is not recomputed and an empty active pool is not closed automatically. Cancelling all its rides can leave the driver unable to complete or replace that pool through the normal UI.
+- **History:** direct passenger pool-join updates the ride but does not add an `ACCEPTED` history event. The standard driver-accept path does record it.
+- **Auth/operations:** refresh tokens are stored as token text, expiry cleanup and refresh rotation are absent, some expiry metadata is hardcoded, and rate limiting/password reset/email verification are not implemented. Startup checks do not validate signing-key strength.
+- **Scale and verification:** no pagination, graph cache, WebSocket updates, broad end-to-end suite, or committed CI workflow. The graph is rebuilt from database rows for each shortest-path lookup, including repeated lookups during insertion search.
+
+## Next improvements
+
+1. Make ride claiming, fare persistence, and lifecycle checks atomic across all booking paths; add database constraints and concurrent regression tests for duplicate claims, capacity changes, and payments.
+2. Recalculate routes after cancellation, close empty pools, record join events, and gate new bookings according to trip progress.
+3. Decide and test a consistent pricing policy for multiple seats and first-passenger discounts; add idempotent payment handling before integrating a real provider.
+4. Expand auth, authorization, fare, payment, and browser-flow tests; run them alongside lint/build in CI.
+5. Add configurable production secrets/expiry handling, refresh rotation/cleanup, rate limits, database SSL support, backups, and a controlled migration step.
+6. Add pagination and graph/path caching, then evaluate live updates and real mapping data against the needs of a larger deployment.
 
 ## AI Usage
 
-- **Codex:** frontend polish, reusable Loading and route components, deployment configuration, bug fixes, route/cancellation/fare changes, verification, and documentation updates.
-- **ChatGPT:** implementation questions, bug-fixing guidance, and project documentation.
+AI assistance was used as an engineering aid during implementation and documentation. The project owner reports the following tools and purposes:
 
-**Accepted suggestion:** reuse a road-graph snapshot within each request-board calculation. This removed repeated database round trips while checks confirmed unchanged matching results.
-
-**Changed suggestion:** hash-based routing initially avoided hosting rewrites, but was replaced by BrowserRouter and a Vercel SPA fallback so production URLs remain clean and refresh correctly.
-
-AI assistance was checked against the code and database behavior. Engineering understanding means explaining ownership checks, state transitions, transactional updates, fare units, and deployment trade-offs, rather than minimizing AI usage.
+| Tool | Use |
+| --- | --- |
+| OpenAI Codex | Frontend polishing. For this documentation update, repository inspection, documentation drafting, linking the existing screenshots/diagrams, and running available checks. |
+| ChatGPT | Implementation questions, help investigating/fixing bugs, and project documentation. |

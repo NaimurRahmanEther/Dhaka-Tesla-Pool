@@ -22,13 +22,13 @@ live in the [root README](../README.md). This file covers only the frontend.
 
 **No state library, no data-fetching library, no component library.** Auth state is
 `useState` plus context, requests use the browser's own `fetch`, and components are
-plain local files. That is a deliberate trade: the brief rewards a small clean MVP
-over a layered one, and every one of those libraries would be a thing to justify in
-an interview.
+plain local files. That is a deliberate trade: the application stays small enough to
+read end to end, and each of those libraries would add a layer that has to be
+justified and kept current.
 
 ## Requirements
 
-- Node 20.19+ (Vite 8 requirement; developed on Node 24)
+- Node `20.19+`, `22.12+`, or `24+` (the range Vite 8 declares; developed on Node 24)
 - The backend running on `http://localhost:8000`
 
 ## Setup
@@ -55,6 +55,8 @@ port is busy, the app appears to work, and every API call fails on CORS.
 | `npm run preview` | Serve the production build locally |
 | `npm run lint` | ESLint over the project |
 
+There is no test script in this package.
+
 ## Environment
 
 | Variable | Required | Default | Purpose |
@@ -64,6 +66,18 @@ port is busy, the app appears to work, and every API call fails on CORS.
 Only `VITE_`-prefixed variables reach the browser, and Vite inlines them at build
 time, so nothing secret belongs in `.env.local`. The real `.env*` files are
 gitignored; only `.env.example` is committed.
+
+The value is baked into the bundle, so it is fixed at build time. That has three
+consequences worth knowing:
+
+| Where it runs | `VITE_API_URL` | Why |
+| --- | --- | --- |
+| Local dev | `http://localhost:8000` | The dev server does not proxy `/api`; the browser calls the API directly and relies on `CORS_ORIGIN`. |
+| Docker | `/api` | Set in `frontend/Dockerfile` before `npm run build`, so Nginx can strip `/api` and forward to the backend. |
+| Vercel | The full Render API origin | Vercel serves only static files, and `vercel.json` rewrites everything to `index.html`, so there is no `/api` proxy. |
+
+See [deployment and hosting](../README.md#deployment-and-hosting) in the root
+README for the production setup.
 
 ---
 
@@ -84,7 +98,8 @@ src/
 │
 ├── hooks/
 │   ├── useApi.js      generic { data, loading, error, reload }
-│   └── useAuth.js     reads the auth context
+│   ├── useAuth.js     reads the auth context
+│   └── usePolling.js  quiet background refresh while the tab is visible
 │
 ├── context/
 │   ├── auth.context.js   the auth context object
@@ -94,20 +109,32 @@ src/
 │   ├── AppRoutes.jsx        the one route table
 │   ├── ProtectedRoute.jsx   requires a signed-in user
 │   ├── PublicOnlyRoute.jsx  keeps signed-in users off /login and /register
-│   └── RoleRoute.jsx        requires PASSENGER or DRIVER
+│   ├── RoleRoute.jsx        requires PASSENGER or DRIVER
+│   └── dashboardPath.js     the landing URL for a given role
 │
 ├── services/          one file per backend module; builds the request URLs
+│                      auth, history, location, matching, payment, pool, ride,
+│                      route, trip, user, vehicle
 │
 ├── components/
-│   ├── ui/            Button, Input, Select, Card, Badge, Spinner,
-│   │                  Alert, EmptyState, PageHeader
-│   └── layout/        sidebar/mobile navigation, auth layout, dashboards, brand
+│   ├── ui/            Button, Input, Select, Card, Badge, Loading, Alert,
+│   │                  EmptyState, PageHeader, PasswordInput, LinkButton,
+│   │                  CancelAction, Icon, RouteArt
+│   ├── layout/        AppShell, Navbar, Dashboard, AuthLayout, Brand,
+│   │                  PageContainer
+│   ├── ride/          RoutePath, RoutePreview, RouteSummary, FareBreakdown,
+│   │                  HistoryTable, HistoryColumns, HistoryView
+│   └── driver/        RequestCard, PassengerManifest
 │
 └── pages/
+    ├── LandingPage.jsx      public marketing page
+    ├── NotFoundPage.jsx     unmatched routes
     ├── auth/          RegisterPage, LoginPage
-    ├── passenger/     request a ride, my rides, ride detail, payments
-    ├── driver/        my Tesla, request board, active trip
-    └── account/       profile
+    ├── passenger/     PassengerHome, RequestRidePage, MyRidesPage,
+    │                  RideDetailPage, JoinPoolPage, PaymentsPage, HistoryPage
+    ├── driver/        DriverHome, MyTeslaPage, RequestsPage, ActiveTripPage,
+    │                  HistoryPage
+    └── account/       ProfilePage
 ```
 
 ### Conventions
@@ -120,10 +147,10 @@ src/
    still be cancelled? — live in `lib/`, where they can be reasoned about and tested.
 5. **Every screen that loads data renders three states: loading, error, and empty.**
 6. **Pages compose the UI kit, never hand-roll UI.** Buttons, inputs, cards, badges,
-   spinners, alerts and empty states come from `src/components/ui/`. The kit is
-   strictly presentational — no component there fetches, navigates, or knows the
-   backend exists. The one exception is `Badge`, which maps the status strings from
-   `lib/constants.js` to colours.
+   loading indicators, alerts and empty states come from `src/components/ui/`. The
+   kit is strictly presentational — no component there fetches, navigates, or knows
+   the backend exists. The one exception is `Badge`, which maps the status strings
+   from `lib/constants.js` to colours.
 
 ### No hardcoded data
 
@@ -175,11 +202,12 @@ A few rules the whole app follows, so the behaviour is consistent rather than
 rediscovered page by page.
 
 **Every screen that loads data renders three distinct states, and all three are
-designed.** Loading shows a spinner and the name of what is loading. An error
+designed.** Loading shows an indicator and the name of what is loading. An error
 shows what went wrong and what to try next. An empty state explains why it is
-empty and offers the button that fills it — a driver with no Tesla should see
-"You have not registered a Tesla yet", not `Error: 404`. Three backend endpoints
-return 404 to mean "nothing here yet", and the app treats those as empty states.
+empty and offers the action that fills it — a driver with no vehicle sees
+"First, tell us a little about your Tesla." above the registration form, not
+`Error: 404`. Three backend endpoints return 404 to mean "nothing here yet", and
+the app treats those as empty states.
 
 **Errors use the backend's own wording.** The API already sends sentences meant
 for humans, like "Not enough seats available: 1 left, 2 requested", and those are
@@ -205,7 +233,7 @@ page. Start there to understand the whole navigation surface.
 ## How data loading works
 
 Every page follows the same shape, so there is one pattern to learn rather than
-eleven.
+one per screen.
 
 `api/client.js` is the only place that knows the backend exists. It attaches the
 bearer token, sends the refresh cookie, unwraps the API's
@@ -225,7 +253,7 @@ const rides = await rideService.getMyRides()   // already unwrapped
 ```jsx
 const { data, loading, error, reload } = useApi(rideService.getMyRides, [])
 
-if (loading) return <Spinner />
+if (loading) return <Loading />
 if (error) return <Alert>{error}</Alert>
 if (!data.length) return <EmptyState />
 return data.map((ride) => <RideCard key={ride.id} ride={ride} />)

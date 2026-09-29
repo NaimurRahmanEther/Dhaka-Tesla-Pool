@@ -107,19 +107,19 @@ try {
   const locations = await api('/location')
   const id = (name) => locations.find((location) => location.name === name).id
   const login = async (email) => (await api('/auth/login', 'POST', { email, password: DEMO_PASSWORD })).accessToken
-  const driver = await login('jashim.demo@example.test')
-  const nusrat = await login('nusrat.demo@example.test')
-  const rafiq = await login('rafiq.demo@example.test')
+  const driver = await login('driver@example.test')
+  const first = await login('passenger1@example.test')
+  const second = await login('passenger2@example.test')
   try { await api('/vehicle/me', 'GET', undefined, driver) } catch {
     await api('/vehicle', 'POST', { model: 'Bullet · Tesla Model 3', capacity: 4, currentLocationId: id('Banani') }, driver)
   }
   await api('/vehicle/status', 'PATCH', { status: 'ONLINE' }, driver)
   await api('/driver-routes', 'POST', { currentLocationId: id('Banani'), destinationLocationId: id('Gulshan') }, driver)
-  await signIn('jashim.demo@example.test', '/tesla', 'Where are you heading?')
+  await signIn('driver@example.test', '/tesla', 'Where are you heading?')
   await waitFor('Gulshan')
   await capture('02-driver-route.png')
 
-  await signIn('nusrat.demo@example.test', '/request', 'Where are we heading?')
+  await signIn('passenger1@example.test', '/request', 'Where are we heading?')
   await evaluate(`(() => {
     const selects = document.querySelectorAll('select');
     const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
@@ -129,23 +129,23 @@ try {
   })()`)
   await pause(300)
   await capture('03-request-ride.png')
-  const ride = await api('/rides', 'POST', { pickupLocationId: id('Banani'), destinationLocationId: id('Mohakhali'), seatsRequested: 1 }, nusrat)
-  await signIn('jashim.demo@example.test', '/requests', 'Find your next shared journey.')
+  const ride = await api('/rides', 'POST', { pickupLocationId: id('Banani'), destinationLocationId: id('Mohakhali'), seatsRequested: 1 }, first)
+  await signIn('driver@example.test', '/requests', 'Find your next shared journey.')
   await evaluate(`(() => {
     const input=document.querySelector('input[type="search"]');
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'Nusrat Demo');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'Passenger One');
     input.dispatchEvent(new Event('input',{bubbles:true}));
   })()`)
   await waitFor('Change route and accept')
   await pause(300)
   await capture('04-change-route.png')
   const accepted = await api(`/matching/${ride.id}/accept`, 'POST', { changeRoute: true }, driver)
-  const second = await api('/rides', 'POST', { pickupLocationId: id('Gulshan'), destinationLocationId: id('Mohakhali'), seatsRequested: 1 }, rafiq)
-  await api(`/matching/${second.id}/accept`, 'POST', {}, driver)
+  const secondRide = await api('/rides', 'POST', { pickupLocationId: id('Gulshan'), destinationLocationId: id('Mohakhali'), seatsRequested: 1 }, second)
+  await api(`/matching/${secondRide.id}/accept`, 'POST', {}, driver)
   await visit('/active-trip', 'Your trip route')
-  await waitFor('Rafiq Demo')
+  await waitFor('Passenger Two')
   await capture('05-active-trip.png')
-  await signIn('nusrat.demo@example.test', `/my-rides/${ride.id}`, 'Your shared trip route')
+  await signIn('passenger1@example.test', `/my-rides/${ride.id}`, 'Your shared trip route')
   await capture('06-passenger-trip.png')
 
   for (const action of ['arrive', 'start', 'complete']) {
