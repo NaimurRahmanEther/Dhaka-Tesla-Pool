@@ -161,8 +161,8 @@ This matters more than usual here, because the fare is the thing the whole
 project is judged on. The backend computes it in `modules/fare/fare.utils.js` and
 stores the result on the ride as `fare_breakdown` JSONB — there is no fare
 endpoint to call. So the frontend renders the line items the server returned and
-recomputes nothing. A `210` hardcoded into a page would be indistinguishable from
-a real one right up until it was wrong.
+recomputes nothing. A `132.50` hardcoded into a page would be indistinguishable
+from a real one right up until it was wrong.
 
 The same applies to everything else the server already knows: seats remaining,
 detour distance, whether a request fits in a given Tesla, and pool occupancy are

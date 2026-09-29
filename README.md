@@ -47,11 +47,11 @@ This project models that problem using a small road graph of Dhaka. A booking mu
 | Matching | Show drivers waiting requests with seat availability and route compatibility. Drivers can accept a specific request; a separate API endpoint supports automatic candidate ranking. |
 | First-passenger route change | The driver can accept any reachable first passenger's route with enough available seats, using **Change route and accept** when it does not fit the original plan. From the second passenger onward, acceptance depends on the extra distance compared with the current shared route. |
 | Pooling | Insert pickup/drop-off stops, enforce the 2 km incremental detour rule, and check seats in a database transaction. Passengers can also join an existing pool using its number. |
-| Trip management | Driver actions move eligible rides through arrival, start, and completion. The active-trip screen includes a passenger manifest, occupancy, and full shared route. |
-| Fares | Store and display base fare, distance charge, pool discount, and total to the poisha. The pool's driven route is priced segment by segment; a segment shared by several riders is split between them, and a booking of several seats claims several seats' share of that road. |
+| Trip management | Arrival and start are per-passenger actions in the manifest; completion is a single pool action, enabled only once every ride is `ONGOING`. The active-trip screen shows the passenger manifest, occupancy, and full shared route. |
+| Fares | Price the pool as a series of road segments and store base fare, distance charge, pool discount, total, and a per-leg record as fractional BDT. Whole pool is repriced whenever the manifest or route changes. |
 | Payments and history | Record `CASH` or `TESLA_WALLET` as a simulated payment for a completed ride; view payment records, passenger history, and completed driver trips. |
-| Interface | Responsive role-specific navigation, shared controls, search/filtering, loading/error/empty states, password visibility, action confirmations, and manual Refresh controls. |
-| Operations | Database-aware health endpoint, SQL migrations, repeatable reference-data seeds, Docker Compose, and unit/integration test scripts. |
+| Interface | Responsive role-specific navigation, shared controls, search/filtering, loading/error/empty states, password visibility, action confirmations, manual Refresh controls, and background polling on the live screens. |
+| Operations | Database-aware health endpoint, SQL migrations, repeatable reference-data seeds, Docker Compose, and a standalone demo-account registration script. |
 
 The normal ride lifecycle is:
 
@@ -61,26 +61,35 @@ REQUESTED -> MATCHED -> DRIVER_ARRIVED -> ONGOING -> COMPLETED
     +-----------+-----> CANCELLED
 ```
 
+Transitions are **forward-only** and defined once in `backend/src/modules/rides/rideStatus.js`; each repository step also guards with a `WHERE status = ...` clause, so a skipped stage is a `409`, never a silent jump. `COMPLETED` and `CANCELLED` are terminal.
+
 Cancellation is available only in `REQUESTED` or `MATCHED`. Creating a request does not automatically dispatch a driver. An acceptance or explicit pool join confirms the fare and assignment.
+
+**Arrival and start act on one passenger at a time**, via `PATCH /trips/:poolId/rides/:rideId/arrive` and `.../start`. The pool-level `PATCH /trips/:poolId/arrive` and `.../start` routes deliberately return `409` with a message pointing at the per-passenger path, so passengers arriving at different times are not collapsed into one state. `PATCH /trips/:poolId/complete` is pool-level and is rejected unless every ride in the pool is `ONGOING`.
 
 ### Fares
 
-A passenger's fare follows one rule:
+A fare is not a flat price-per-kilometre. Each pooled trip is priced as a series of road segments, and every segment is paid for by whoever is actually in the car while it is being driven:
 
 ```text
-passenger fare = base fare + distance charge - pool discount
+segment cost = segment distance x 20 BDT per km
+rider fare   = 50 BDT base fare + their share of the segment costs - sharing discount
 ```
 
-What changed is what `distance charge` is measured against. A pool is priced segment by segment along the route the driver actually drives, and each segment is paid for by whoever is in the car while it is driven:
+| Part | Rule |
+| --- | --- |
+| Base fare | A flat **50 BDT per booking**, charged to each passenger individually and never divided. A full car therefore collects more than the journey costs to run, which is intentional. |
+| Segment cost | Every segment of the pool's ordered route costs `distance x 20` BDT, and is split between the riders aboard it, **weighted by the seats** each booking takes. |
+| Deadhead road | Segments before the first pickup have nobody aboard and are not billed to passengers at all. |
+| Sharing discount | **25% of the rider's own distance charge**, earned only by a rider who travelled at least one segment with somebody else. A rider who sits out alone pays the full rate, and the discount never touches the base fare. |
 
-- A segment with one rider aboard is charged to that rider in full.
-- A segment with several riders aboard is split between them. A booking of several seats claims several seats' share of that road, so two seats pays double the one-seat share.
-- The driver's drive to the first pickup carries nobody and is billed to no one.
-- Money carries to the poisha (1 BDT = 100 poisha) and all arithmetic runs in integer poisha, so a segment shared three ways is 33.34 / 33.33 / 33.33 and the shares still sum to 100.00. Fares are stored as `NUMERIC(10,2)`.
+Money carries to the **poisha** (1 BDT = 100 poisha) and all arithmetic runs in integer poisha, because binary floating point cannot represent `26.67` exactly and the riders would stop adding up to the trip's cost. A segment shared three ways is `26.67`, not a rounded guess. Leftover poisha from rounding go to whoever was cut down hardest, so the shares always sum back to the segment cost exactly. `rides.fare` is therefore `NUMERIC(10,2)`, not an integer.
 
-The 25% pool discount is earned per rider and only by a rider who shared at least one segment. It comes off that rider's own road charge, never the base fare, so the base still covers the driver's fixed cost of making the trip. A rider who travels a private leg the whole way shares nothing and pays the full rate.
+Because a rider's share depends on **who else is in the car**, the whole pool is repriced on every change — a new passenger joining, a cancellation, or a driver-side removal — and the route is rebuilt first so the remaining riders are charged against the road actually driven. Fares are never locked at match time, so an earlier passenger's fare moves when the manifest changes.
 
-Because a rider's share depends on who else is in the car, **every rider in a pool is repriced whenever its membership or route changes**. A fare is not locked at match time: the moment a second passenger is accepted, the first passenger's fare moves too, because the two of them now share road. Adding a passenger can also lengthen the road an existing passenger travels, and that is billed to whoever is aboard for it rather than dumped on one person.
+For example, in the walkthrough below the shared route is Banani → Gulshan → Mohakhali (8 km = 160 BDT of road). Passenger One is aboard for the whole 8 km and shares the last 5 km, so they pay `50 + 110 − 27.50` = **132.50 BDT**. Passenger Two rides only the shared 5 km leg, so they pay `50 + 50 − 12.50` = **87.50 BDT**.
+
+The stored `fare_breakdown` JSONB carries the line items plus a per-leg record of every stretch the rider occupied, how many co-riders were in the car for it, and what they paid for it. The frontend renders those values and recomputes nothing.
 
 ### Passenger and driver capabilities
 
@@ -91,7 +100,7 @@ Because a rider's share depends on who else is in the car, **every rider in a po
 | See the estimated fare once matched | Plan and save a route; browse compatible waiting requests |
 | Track status through to completion or cancellation | Accept a request, with or without changing the route |
 | Join an existing pool by pool number | View the passenger manifest and seat occupancy |
-| Cancel while `REQUESTED` or `MATCHED` | Mark arrival, start, and completion in order |
+| Cancel while `REQUESTED` or `MATCHED` | Mark each passenger arrived and started, then complete the trip |
 | Record a payment and review ride history | Review completed trips and plan the next route |
 
 ### First request versus later requests
@@ -119,18 +128,11 @@ These images are supplied in [`docs/screenshots`](docs/screenshots). They show t
 
 ### Demo video
 
-Watch the screen recording of the full passenger and driver flow:
+A screen recording of the full passenger and driver flow is hosted on Google Drive:
 
-**[Open the demo video](https://drive.google.com/file/d/1Zle0fdd8ffFGGupJ43HypJAF6fygyr68/view?usp=sharing)**
+[Watch the demo video](https://drive.google.com/file/d/1n2LVlbVBxtjAHZipO1YSScBpaYwYjg6d/view?usp=sharing)
 
-<iframe
-  src="https://drive.google.com/file/d/1Zle0fdd8ffFGGupJ43HypJAF6fygyr68/preview"
-  width="800"
-  height="450"
-  frameborder="0"
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-  allowfullscreen>
-</iframe>
+If the Drive preview does not load inline, use **Open with → Google Drive video player** or download the file from the same link.
 
 <details>
 <summary>Driver: vehicle availability and route planning</summary>
@@ -163,7 +165,7 @@ Watch the screen recording of the full passenger and driver flow:
 <details>
 <summary>Passenger: ride status, fare breakdown, route, and timeline</summary>
 
-![Passenger ride detail with 210 BDT fare and shared route](docs/screenshots/06-passenger-trip.png)
+![Passenger ride detail with fare breakdown and shared route](docs/screenshots/06-passenger-trip.png)
 
 </details>
 
@@ -179,7 +181,9 @@ When hosted, the two tiers are split across providers: the built frontend is a s
 
 Backend modules follow `route -> middleware -> controller -> service -> repository -> PostgreSQL`. Middleware handles authentication, roles, and request-body validation; services implement business rules; repositories contain parameterized SQL. The graph and fare modules are internal services rather than public endpoints.
 
-The frontend uses React context for authentication, service files for endpoint calls, and one shared HTTP client for bearer tokens, cookies, response parsing, and one refresh/retry after an expired access token. Access tokens stay in memory; refresh tokens use an HttpOnly cookie. Screens load data on entry and refresh after actions or when the user selects Refresh.
+The frontend uses React context for authentication, service files for endpoint calls, and one shared HTTP client for bearer tokens, cookies, response parsing, and one refresh/retry after an expired access token. Access tokens stay in memory (React state, never `localStorage`); refresh tokens use an HttpOnly cookie, and a refresh in flight is shared so concurrent 401s trigger only one call. Screens load data on entry and refresh after actions or when the user selects Refresh.
+
+Four live screens additionally **poll** in the background through `usePolling`: the driver's request board (10s), and the driver's active trip, driver's Tesla, and passenger ride detail (15s). Polling pauses while a mutation is in flight and only fires when `document.visibilityState === 'visible'`.
 
 ## Database design
 
@@ -192,7 +196,7 @@ The supplied ERD shows the 12 application tables. The migration runner also crea
 | `users`, `vehicles` | Account roles and driver vehicle details. The service checks for an existing vehicle before registration. |
 | `locations`, `road_edges` | Named locations and weighted road links used to build an undirected graph. |
 | `driver_routes` | Saved driver plans, including JSONB path and distance. |
-| `rides` | Passenger requests, seats, status timestamps, integer fare, and JSONB fare breakdown. |
+| `rides` | Passenger requests, seats, status timestamps, `NUMERIC(10,2)` fare, and JSONB fare breakdown with per-leg detail. |
 | `pools`, `pool_rides` | Vehicle/driver journeys and passenger assignments; route snapshots and allocated seats. |
 | `ride_history` | Lifecycle events and the user responsible for each event. |
 | `payments` | Recorded payment amount, method, and status for a passenger's ride. |
@@ -206,15 +210,18 @@ Versions below describe the repository's package declarations and Docker images.
 
 | Layer | Technologies |
 | --- | --- |
-| Frontend | JavaScript ES modules, React 19.2, React Router 7, Vite 8.3, Tailwind CSS 4.3 |
+| Frontend | JavaScript ES modules, React 19.2, React Router 7, Vite 8.3, Tailwind CSS 4.3 via `@tailwindcss/vite` |
 | Backend | Node.js, CommonJS JavaScript, Express 5.2, `pg` 8.23 |
 | Validation and auth | Zod 4.6, bcrypt 6, jsonwebtoken 9, cookie-parser, CORS |
+| Runtime helpers | `dotenv` 18, `morgan` 1, Nodemon (dev only) |
 | Persistence | PostgreSQL 16, handwritten SQL migrations, JSONB route/fare snapshots |
-| Linting | ESLint 10, `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh` |
+| Linting | ESLint 10 with `@eslint/js` and `globals`, `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh` |
 | Containers | Docker Compose, Node 24 Alpine images, PostgreSQL 16 Alpine, Nginx Alpine |
 | Hosting | Vercel (frontend), Render (backend), Neon (PostgreSQL) |
 
 The application uses browser `fetch` and local UI components. There is no ORM, external mapping service, payment gateway, or Tesla SDK in the dependency list.
+
+Neither `package.json` defines a `test` script, and there is no test framework in the dependency list. Verification is `npm run lint` and `npm run build` on the frontend, plus manual API and browser walkthroughs. This is listed as a gap under [known limitations](#known-limitations).
 
 ## Project structure
 
@@ -234,8 +241,11 @@ dhaka-tesla-pool/
 |       |-- server.js               DB check and HTTP listener
 |       |-- config/env.js           Environment loading and required checks
 |       |-- database/               Connection, migration runner, and seeds
-|       |   |-- migrations/up/      12 forward SQL migrations
-|       |   |-- migrations/down/    12 matching rollback SQL files
+|       |   |-- db.js               Pool creation and SSL/channel binding
+|       |   |-- testConnection.js    Boot-time connectivity check
+|       |   |-- migrate.js          Forward/rollback runner
+|       |   |-- migrations/up/      13 forward SQL migrations
+|       |   |-- migrations/down/    13 matching rollback SQL files
 |       |   `-- seeds/              Locations and road-edge reference data
 |       |-- middleware/             Auth, roles, validation, error handling
 |       |-- modules/
@@ -243,13 +253,20 @@ dhaka-tesla-pool/
 |       |   |-- graph/              Dijkstra and the in-memory road graph
 |       |   |-- routes/ rides/ matching/ pools/
 |       |   |-- trips/ fare/ payment/ history/
-|       `-- utils/                  Error and response helpers
+|       `-- utils/                  AppError and response envelope helpers
 |-- frontend/
 |   |-- .env.example                Public API base URL template
 |   |-- Dockerfile                  Vite build and Nginx runtime
+|   |-- index.html                  Vite HTML entry
 |   |-- nginx.conf                  SPA fallback and /api proxy
 |   |-- vercel.json                 Vercel SPA fallback rewrite
+|   |-- vite.config.js              Vite + Tailwind plugin, @ alias, port 5173
+|   |-- jsconfig.json               Enables the @ path alias in editors
+|   |-- eslint.config.js            Flat ESLint config
 |   `-- src/
+|       |-- main.jsx                BrowserRouter > AuthProvider > App
+|       |-- App.jsx                 Renders <AppRoutes /> and nothing else
+|       |-- index.css               Tailwind import and theme tokens
 |       |-- api/                    Shared fetch client and response parser
 |       |-- context/                Auth provider and context
 |       |-- routes/                 Route table and access guards
@@ -265,16 +282,14 @@ dhaka-tesla-pool/
 `-- docs/
     |-- system-architecture.png
     |-- database-design.png
-    |-- screenshots/                Six application screenshots
-    `-- capture-screenshots.mjs      Local screenshot automation
+    `-- screenshots/                Six application screenshots
 ```
 
 ## Prerequisites
 
 - For local development: Node.js and npm, PostgreSQL 16, and Git. Node 24 is the version used for the checks below. The locked frontend tools require Node `20.19+`, `22.13+`, or `24+` on their respective supported major lines; the backend alone declares `>=20`.
-- For the full container setup: Docker with the Compose plugin and a running engine. Host Node/PostgreSQL installations are unnecessary unless running host-side utility scripts or tests.
-- Available ports: `5173` for the frontend, `8000` for the API, and `5432` for PostgreSQL. Vite fails if `5173` is occupied.
-- For optional screenshot capture: Node 22.13+ or Node 24, Chrome/Edge, and the Docker-style `/api` proxy described in the technical reference.
+- For the full container setup: Docker with the Compose plugin and a running engine. Host Node/PostgreSQL installations are unnecessary unless running host-side utility scripts.
+- Available ports: `5173` for the frontend, `8000` for the API, and `5432` for PostgreSQL. Vite uses `strictPort`, so it fails rather than sliding to `5174` when `5173` is occupied.
 
 ## Environment variables
 
@@ -310,11 +325,11 @@ The boot-time check validates the presence of required values, not their strengt
 
 | Variable | Local value | Docker build value | Vercel value |
 | --- | --- | --- | --- |
-| `VITE_API_URL` | `http://localhost:8000` | `/api` | `https://dhaka-tesla-pool-backend-1n45.onrender.com` |
+| `VITE_API_URL` | `http://localhost:8000` | `/api` | `https://dhaka-tesla-pool-backend.onrender.com` |
 
 Vite embeds this value in the browser bundle at build time. Never place secrets in `VITE_*` variables. The Dockerfile sets `/api` explicitly and does not copy `.env.local`; changing a runtime container variable will not change the built frontend. On Vercel the value is a dashboard environment variable, so it must be set before the build and a change requires a redeploy. See [deployment and hosting](#deployment-and-hosting).
 
-`DEMO_API_URL` optionally overrides the demo script's default `http://localhost:8000`, but the script accepts only localhost/loopback hosts. `CHROME_PATH` optionally selects the screenshot script's browser executable. Neither is required by the application.
+`DEMO_API_URL` optionally overrides the demo script's default `http://localhost:8000`, but the script accepts only localhost/loopback hosts. It is not required by the application.
 
 ## Local setup
 
@@ -446,7 +461,8 @@ Run these commands from `backend/` for local development:
 | `npm run migrate` | Applies unapplied `src/database/migrations/up/*.sql` files in filename order, in individual transactions. |
 | `npm run migrate:down` | Rolls back one most recently applied migration using its matching down file. This can drop a table and its data. |
 | `npm run seed` | Inserts reference locations and road edges; creates no users, vehicles, bookings, or payments. |
-| `npm run demo:accounts` | Registers the three local demo accounts through the running API. |
+
+Those five are the only scripts `backend/package.json` defines. Demo accounts are **not** one of them; see [demo credentials and walkthrough](#demo-credentials-and-walkthrough) for the standalone script.
 
 `schema_migrations` records filenames, so rerunning migration-up skips applied files. Editing an already-applied file will not update an existing database; add a new migration for schema changes. The numbering gap at `007` is harmless because the runner discovers files rather than requiring consecutive numbers.
 
@@ -460,7 +476,7 @@ These are deliberately public, local-only accounts defined in [`create-demo-acco
 node backend/scripts/create-demo-accounts.js
 ```
 
-Or run `npm run demo:accounts` from `backend/`. Existing accounts remain unchanged, including their passwords.
+There is no `npm` script for this; `node backend/scripts/create-demo-accounts.js` is the only entry point. Existing accounts are left untouched, including their passwords.
 
 | Role | Name | Email | Password |
 | --- | --- | --- | --- |
@@ -484,11 +500,11 @@ Use separate browser profiles or a normal/private window for the driver and pass
 3. Sign in as Passenger One and request **Banani -> Mohakhali**, one seat.
 4. As the driver, open **Ride requests** and select **Refresh**. The request exceeds the original route's 2 km detour limit. Choose **Change route and accept** to explicitly replace the unused plan with **Banani -> Gulshan -> Mohakhali**, 8 km.
 5. As Passenger Two, request **Gulshan -> Mohakhali**, one seat. The driver can accept it into the same pool. Alternatively, Passenger Two can use **Join a pool** with the pool number shown in the driver's active trip.
-6. Refresh both trip screens. The driver sees two occupied seats and two remaining. The 8 km route is priced as two segments: Banani -> Gulshan (3 km) carries only Passenger One and is charged to them in full, while Gulshan -> Mohakhali (5 km) carries both and is split. Passenger One's fare is **132.50 BDT** and Passenger Two's is **87.50 BDT**. Both earned the 25% discount, and Passenger One's fare was repriced downward when the second passenger joined and their road became shared.
-7. As the driver, select **Mark as arrived**, then start and complete the trip in order. Refresh the passenger screen after each change.
+6. Refresh both trip screens. The driver sees two occupied seats and two remaining. Passenger One is aboard for the whole 8 km and shares the last 5 km, so their fare is **132.50 BDT** (`50` base + `110` distance − `27.50` discount). Passenger Two rides only the shared 5 km leg, so their fare is **87.50 BDT** (`50` + `50` − `12.50`). The pool collects **220 BDT** for 160 BDT of road.
+7. As the driver, open **Active trip**. Each passenger has their own **Mark as arrived** and then **Start trip** button in the manifest. Once both are `ONGOING`, the single **Complete trip** button becomes available. Refresh the passenger screen after each change.
 8. As each passenger, record a payment for the completed ride using `CASH` or `TESLA_WALLET`. Review payments and history; the driver can review the completed trip and plan another route.
 
-For a separate cancellation demonstration, cancel a waiting or matched ride before driver arrival. See the cancellation limitations below before cancelling every passenger in an active pool.
+For a separate cancellation demonstration, cancel a waiting or matched ride before driver arrival. Cancelling out of an active pool removes the passenger, re-plans the route for whoever is left, and reprices them.
 
 ## Deployment and hosting
 
@@ -504,14 +520,14 @@ The three tiers are hosted separately, each on a different service:
 
 | Scope | Entry | URL |
 | --- | --- | --- |
-| Hosted | Frontend | `https://dhaka-tesla-pool-umber.vercel.app` |
-| Hosted | API | `https://dhaka-tesla-pool-backend-1n45.onrender.com` |
-| Hosted | API health | `https://dhaka-tesla-pool-backend-1n45.onrender.com/health` |
+| Hosted | Frontend | `http://dhaka-tesla-pool-umber.vercel.app` |
+| Hosted | API | `https://dhaka-tesla-pool-backend.onrender.com` |
+| Hosted | API health | `https://dhaka-tesla-pool-backend.onrender.com/health` |
 | Local | Frontend | [http://localhost:5173](http://localhost:5173) |
 | Local | API | [http://localhost:8000](http://localhost:8000) |
 | Local | API health | [http://localhost:8000/health](http://localhost:8000/health) |
 
-> The live Render hostname carries the `-1n45` suffix. `render.yml` requests `dhaka-tesla-pool-backend`, but that name was already taken on Render, so the platform suffixed the real service. The bare `dhaka-tesla-pool-backend.onrender.com` therefore resolves to an **unrelated** service and must not be used — the correct API hostname is the suffixed one, which is also what the Vercel bundle has baked in as `VITE_API_URL`.
+The API hostname follows from the `name: dhaka-tesla-pool-backend` value in `render.yml`. Confirm the live frontend domain in the Vercel project's Domains settings and use it for `CORS_ORIGIN`.
 
 ### Backend on Render
 
@@ -520,8 +536,6 @@ The three tiers are hosted separately, each on a different service:
 | Setting | Value |
 | --- | --- |
 | Type / plan | `web`, `free` |
-| Requested name | `dhaka-tesla-pool-backend` |
-| Live name | `dhaka-tesla-pool-backend-1n45` — Render suffixes the requested name when it is already taken |
 | Root directory | `backend` |
 | Build command | `npm ci` |
 | Start command | `npm start` (runs `node src/server.js`) |
@@ -530,9 +544,10 @@ The three tiers are hosted separately, each on a different service:
 | `NODE_ENV` | `production` |
 | `DB_SSL` | `true` |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | `generateValue: true` — Render creates a random value per service |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `CORS_ORIGIN` | `sync: false` — set these by hand in the Render dashboard |
+| `DB_PORT` | `5432` (a fixed value in `render.yml`, not `sync: false`) |
+| `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `CORS_ORIGIN` | `sync: false` — set these by hand in the Render dashboard |
 
-Render injects `PORT` automatically, and the API already reads it, so no port is hardcoded in `render.yml`. Because the live name is suffixed, read the real hostname from the Render dashboard rather than deriving it from `render.yml`.
+Render injects `PORT` automatically, and the API already reads it, so no port is hardcoded in `render.yml`.
 
 **Migrations are not automatic on Render.** Unlike `backend/Dockerfile`, which chains migrate → seed → start, the Render start command only runs `node src/server.js`, and `src/server.js` performs a connection check rather than applying migrations. On a fresh Neon database, run these once from the Render dashboard's **Shell** tab:
 
@@ -562,7 +577,7 @@ The real password is committed nowhere: `backend/.env` is gitignored, and the Re
 
 Import the repository into Vercel with the **frontend** directory as the project root. Vercel detects Vite and runs `npm run build`, publishing `dist/`. Two settings matter:
 
-1. **Environment variable** — set `VITE_API_URL` to the full Render API origin, `https://dhaka-tesla-pool-backend-1n45.onrender.com`. Do **not** use `/api` here. Vite inlines the value at build time, so the variable must be set before the build runs; changing it in the dashboard requires a redeploy. It is a public `VITE_` value and contains no secret.
+1. **Environment variable** — set `VITE_API_URL` to the full Render API origin, for example `https://dhaka-tesla-pool-backend.onrender.com`. Do **not** use `/api` here. Vite inlines the value at build time, so the variable must be set before the build runs; changing it in the dashboard requires a redeploy. It is a public `VITE_` value and contains no secret.
 2. **SPA routing** — [`frontend/vercel.json`](frontend/vercel.json) rewrites every path to `/index.html` so that React Router deep links work on a hard refresh.
 
 Because the catch-all rewrite sends unmatched paths to `index.html`, Vercel provides **no `/api` proxy**. The `/api` prefix is only meaningful in the Docker/Nginx setup, where Nginx strips it before forwarding to `backend:8000`. In the hosted setup, frontend and API are on different domains, so every request carries the absolute `VITE_API_URL`.
@@ -571,7 +586,7 @@ Because the catch-all rewrite sends unmatched paths to `index.html`, Vercel prov
 
 Frontend on Vercel and API on Render are different origins, so both sides need configuring:
 
-- Set Render's `CORS_ORIGIN` to the Vercel production origin, in this deployment `https://dhaka-tesla-pool-umber.vercel.app`. `src/config/env.js` splits the value on commas, so several origins can be listed, for example `https://dhaka-tesla-pool-umber.vercel.app,http://localhost:5173` for local frontend work against the hosted API. Vercel preview deployments get a different domain per branch, so each one must be added explicitly.
+- Set Render's `CORS_ORIGIN` to the Vercel production origin. `src/config/env.js` splits the value on commas, so several origins can be listed, for example `https://your-app.vercel.app,http://localhost:5173` for local frontend work against the hosted API. Vercel preview deployments get a different domain per branch, so each one must be added explicitly.
 - In production the refresh cookie is issued as `Secure` and `SameSite=None` (`src/modules/auth/auth.controller.js`), which is what allows the cross-site cookie to travel. Both sites are served over HTTPS by their platforms, so this works, but a plain-HTTP origin will not receive the cookie and sessions will not survive a token refresh.
 - A single origin with `/api` forwarding is the simpler alternative. Keeping the API behind the same host as the frontend avoids CORS and cross-site cookies entirely, at the cost of a reverse proxy in front of the API.
 
@@ -581,23 +596,25 @@ The repository still contains the full local setup: [`docker-compose.yml`](docke
 
 ## API overview
 
-Direct local API base: `http://localhost:8000`. Through Docker Nginx: `http://localhost:5173/api`. When hosted, the base is the absolute `VITE_API_URL` built into the Vercel bundle, `https://dhaka-tesla-pool-backend-1n45.onrender.com`.
+Direct local API base: `http://localhost:8000`. Through Docker Nginx: `http://localhost:5173/api`. When hosted, the base is the absolute `VITE_API_URL` built into the Vercel bundle, for example `https://dhaka-tesla-pool-backend.onrender.com`.
 
 Protected requests use `Authorization: Bearer <access-token>`. Login sets the HttpOnly `refreshToken` cookie; browser calls include credentials. Successful resource responses normally use `{ "success": true, "message": "...", "data": ... }`; errors use `{ "success": false, "message": "..." }`. The root and health endpoints have their own response shapes.
 
-| Module | Main operations |
-| --- | --- |
-| `/auth` | Register, login, refresh access token, logout |
-| `/users/me` | Read and update the signed-in user's profile |
-| `/location` | Public location list and detail |
-| `/vehicle` | Driver vehicle creation, editing, and availability |
-| `/driver-routes` | Save and retrieve the driver's route |
-| `/rides` | Passenger requests, own rides, cancellation, authorized event timeline |
-| `/matching` | Driver request board, specific acceptance, automatic matching |
-| `/pool` | Passenger joins by pool number; owning driver reads manifest |
-| `/trips` | Driver active-trip view and arrival/start/completion actions |
-| `/history` | Passenger ride history and driver completed-trip history |
-| `/payments` | Passenger payment recording and payment history |
+| Module | Method and path | Main operations |
+| --- | --- | --- |
+| `/auth` | `POST /register`, `/login`, `/refresh-token`, `/logout` | Register, login, refresh access token, logout. Registration returns the user but **no token**. |
+| `/users` | `GET /me`, `PATCH /me` | Read and update the signed-in user's profile |
+| `/location` | `GET /`, `GET /:id` | Public location list and detail |
+| `/vehicle` | `POST /`, `GET /me`, `PATCH /status`, `PATCH /:id` | Driver vehicle creation, editing, and online/offline availability. `GET /me` is a `404` when no vehicle exists — an empty state, not an error. |
+| `/driver-routes` | `POST /`, `POST /preview`, `GET /me` | Save, preview (no write), and retrieve the driver's route |
+| `/rides` | `POST /`, `GET /my`, `GET /:id/history`, `PATCH /:id/cancel` | Passenger requests, own rides, authorized event timeline, cancellation |
+| `/matching` | `GET /requests`, `POST /:rideId/accept`, `POST /:rideId` | Driver request board, specific acceptance, automatic matching |
+| `/pool` | `POST /:poolId/add-passenger`, `GET /:poolId/passengers` | Passenger joins by pool number; owning driver reads manifest |
+| `/trips` | `GET /my-active`, `PATCH /:poolId/rides/:rideId/:action`, `PATCH /:poolId/complete`, `PATCH /:poolId/cancel` | Driver active-trip view, per-passenger arrive/start, pool completion, driver-side removal. `GET /my-active` is a `404` when there is no trip. |
+| `/history` | `GET /passenger`, `GET /driver` | Passenger ride history and driver completed-trip history |
+| `/payments` | `POST /:rideId`, `GET /my` | Passenger payment recording and payment history |
+
+Folder names do not always match URL prefixes: `modules/pools/` mounts at `/pool`, `modules/routes/` at `/driver-routes`, `modules/vehicles/` at `/vehicle`, and `modules/payment/` at `/payments`. Read `backend/src/app.js` before assuming a path.
 
 See the routing and matching notes above for request shapes. Paths such as `/api/rides` apply only through Nginx; Express itself exposes `/rides`.
 
@@ -610,30 +627,30 @@ See the routing and matching notes above for request shapes. Paths such as `/api
 | Modular Express service/repository layout | Business rules and SQL remain easy to locate in one deployable API. | Transaction boundaries and repeated queries must be managed explicitly. |
 | PostgreSQL transactions and row locks | Matching rechecks seats and rebuilds the route against the locked pool. | Locks cover a vehicle/pool, but additional cross-vehicle ride-claim guarantees are still needed. |
 | JSONB route/fare snapshots | Reads can return the accepted route and fare breakdown directly. | JSON structure is maintained by application code and must be kept consistent with relational changes. |
-| Whole-BDT fare model | Totals can be verified by hand. | No fractional-currency accounting; seats requested do not multiply the fare. |
+| Per-segment fare split in integer poisha | Riders always sum back to the segment cost exactly, and a shared stretch prices fairly between whoever is in the car. | More complex than a flat rate; fares move whenever the manifest or route changes, so the number a passenger saw is not guaranteed to be the number they are charged. |
 | In-memory access token plus HttpOnly refresh cookie | The browser client can restore sessions without persisting access tokens in localStorage. | Cookie lifetime, origin policy, revocation storage, and refresh failures need explicit handling. |
-| Manual Refresh and a small React stack | Simple client state and no persistent connection service. | Updates from another user's session are not pushed automatically. |
+| Polling plus manual Refresh, and a small React stack | Simple client state with no persistent connection service; the live screens catch another session's changes within 10–15 seconds on their own. | Polling is periodic, not push, so a screen can still be up to one interval stale; there is no WebSocket or server-sent event channel. |
 | Migrate/seed at container startup | A fresh local demo starts with the expected schema and locations. | Multiple production replicas need coordinated migrations rather than simultaneous startup changes. |
 
 ## Known limitations
 
 - **Demo scope:** only eight predefined locations; no address search, live GPS, traffic-aware routing, per-stop navigation, real payment processing, wallet balance, driver verification, or admin console.
-- **Trip granularity:** arrival/start/completion act on eligible rides in a pool together. The model does not track each vehicle's progress through individual pickup/drop-off stops. An `ACTIVE` pool can still receive requests after some rides have started.
-- **Fare policy:** a segment shared by several riders is split between them and a multi-seat booking claims a proportional share, but the split is a straight division of that segment's cost and ignores how much each rider detours the others. Riders are repriced on every membership or route change, which means a passenger's fare can still move after they have seen it. The 25% discount is applied on top of the split, so a fully shared rider is discounted twice over - once by sharing the road and once by the percentage.
+- **Trip granularity:** arrival and start are per-passenger, but completion is one pool-level action, so the model still does not track the vehicle's progress through individual pickup/drop-off stops. An `ACTIVE` pool can still receive requests after some rides have started.
+- **Fare policy:** a booking's base fare is charged flat and is not divided, so a pool collects more than the journey costs to run. The 25% sharing discount is earned per rider and only for genuinely shared road. A seat-weighted split means a multi-seat booking claims a proportional share of each segment. Fares are repriced on every manifest or route change rather than locked at match time, and matching writes the fare after the assignment transaction, leaving a consistency gap if that final write fails.
 - **Concurrency/integrity:** there is no unique ride-only pool membership constraint or atomic cross-vehicle claim. Payment deduplication is a check followed by an insert, without a unique ride constraint. Matching uses the pool's capacity snapshot, while direct pool joining checks the live vehicle capacity. These paths need stronger shared invariants before production use.
-- **Cancellation:** seats are removed, but the pool route is not recomputed and an empty active pool is not closed automatically. Cancelling all its rides can leave the driver unable to complete or replace that pool through the normal UI.
-- **History:** direct passenger pool-join updates the ride but does not add an `ACCEPTED` history event. The standard driver-accept path does record it.
-- **Auth/operations:** refresh tokens are stored as token text, expiry cleanup and refresh rotation are absent, some expiry metadata is hardcoded, and rate limiting/password reset/email verification are not implemented. Startup checks do not validate signing-key strength.
-- **Scale and verification:** no pagination, graph cache, WebSocket updates, broad end-to-end suite, or committed CI workflow. The graph is rebuilt from database rows for each shortest-path lookup, including repeated lookups during insertion search.
+- **Cancellation:** cancelling a ride or removing a passenger from the manifest rebuilds the pool route for whoever is left and reprices them, and an emptied pool gets a null route. The pool is not closed automatically though — the driver must call `PATCH /trips/:poolId/cancel`, which is rejected with a `409` until every ride is already `CANCELLED` or `COMPLETED`.
+- **History:** direct passenger pool-join updates the ride and reprices the pool but does not add an `ACCEPTED` history event. The standard driver-accept path does record it.
+- **Auth/operations:** refresh tokens are stored as token text, expiry cleanup and refresh rotation are absent, some expiry metadata is hardcoded, and rate limiting/password reset/email verification are not implemented. Startup checks do not validate signing-key strength. In `NODE_ENV=development` the error handler includes a stack trace in responses.
+- **Scale and verification:** no pagination, graph cache, WebSocket push, automated test suite, or committed CI workflow. Verification is manual: frontend `npm run lint` and `npm run build`, plus API and browser walkthroughs. The graph is rebuilt from database rows for each shortest-path lookup, including repeated lookups during insertion search.
 
 ## Next improvements
 
 1. Make ride claiming, fare persistence, and lifecycle checks atomic across all booking paths; add database constraints and concurrent regression tests for duplicate claims, capacity changes, and payments.
-2. Recalculate routes after cancellation, close empty pools, record join events, and gate new bookings according to trip progress.
-3. Add idempotent payment handling before integrating a real provider, and add regression tests that pin the split, the per-rider discount, and the reprice-on-join behaviour.
-4. Expand auth, authorization, fare, payment, and browser-flow tests; run them alongside lint/build in CI.
-5. Add configurable production secrets/expiry handling, refresh rotation/cleanup, rate limits, database SSL support, backups, and a controlled migration step.
-6. Add pagination and graph/path caching, then evaluate live updates and real mapping data against the needs of a larger deployment.
+2. Close an emptied pool automatically instead of requiring an explicit driver call, record the `ACCEPTED` event on direct pool-join, and gate new bookings according to trip progress.
+3. Decide and test a consistent pricing policy for multi-seat bookings and for the base fare being charged per booking; add idempotent payment handling before integrating a real provider.
+4. Add a test suite covering auth, authorization, the fare split, payments, and browser flows, then run it alongside lint and build in CI.
+5. Add configurable production secrets/expiry handling, refresh rotation and cleanup, rate limits, backups, and a controlled migration step.
+6. Add pagination and graph/path caching, then evaluate push updates and real mapping data against the needs of a larger deployment.
 
 ## AI Usage
 
@@ -641,5 +658,5 @@ AI assistance was used as an engineering aid during implementation and documenta
 
 | Tool | Use |
 | --- | --- |
-| OpenAI Codex | Frontend polishing. For this documentation update, repository inspection, documentation drafting, linking the existing screenshots/diagrams, and running available checks. |
-| ChatGPT | Implementation questions, help investigating/fixing bugs, and project documentation. |
+| OpenAI Codex | Frontend polishing. For the documentation update, drafting this README, linking the existing screenshots and diagrams, and running the available checks. |
+| ChatGPT | Implementation questions, help investigating and fixing bugs, and project documentation. |
